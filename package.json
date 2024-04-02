@@ -1,0 +1,41 @@
+{
+  "name": "shippingtracker_app",
+  "version": "1.0.0",
+  "description": "A comprehensive shipping tracker application designed to provide real-time updates on the status and location of packages. Track shipments from various carriers, view delivery timelines, receive notifications for status changes, and manage multiple packages effortlessly. Stay informed and in control of your shipments with this intuitive and user-friendly shipping tracking solution.",
+  "main": "app.js",
+  "scripts": {
+    "start": "nodemon app.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Dvnvictory/Dvnvictory-ShippingLogisticsApp.git"
+  },
+  "keywords": [
+    "shipping"
+  ],
+  "author": "sihence_dev",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Dvnvictory/Dvnvictory-ShippingLogisticsApp/issues"
+  },
+  "homepage": "https://github.com/Dvnvictory/Dvnvictory-ShippingLogisticsApp#readme",
+  "dependencies": {
+    "bcrypt": "^5.1.1",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-async-errors": "^3.1.1",
+    "express-rate-limit": "^7.2.0",
+    "helmet": "^7.1.0",
+    "http-status-codes": "^2.3.0",
+    "joi": "^17.12.2",
+    "jsonwebtoken": "^9.0.2",
+    "mongodb": "^6.5.0",
+    "mongoose": "^8.2.4",
+    "morgan": "^1.10.0",
+    "rate-limiter": "^0.2.0",
+    "swagger-ui-express": "^5.0.0",
+    "xss-clean": "^0.1.4",
+    "yamljs": "^0.3.0"
+  }
+}
