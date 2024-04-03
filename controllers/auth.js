@@ -1,26 +1,36 @@
-const express = require('express')
+const User = require('../models/authModel')
+const { StatusCodes} = require('http-status-codes')
+const { BadRequestError, UnauthenticatedError } = require('../errors')
 
 
-const getAllUser = async (req, res) => {
-    res.send('route is ready1')
-}
-const getAUser = async (req, res) => {
-    res.send('route is ready2')
-}
-const createUser = async (req, res) => {
-    res.send('route is ready3')
-}
-const updateUser = async (req, res) => {
-    res.send('route is ready4')
-}
-const deleteUser = async (req, res) => {
-    res.send('route is ready5')
+const register = async (req, res) => {
+    const user = await User.create({...req.body})
+    const token = user.createJWT()
+    res
+    .status(StatusCodes.CREATED)
+    .json({ user: {name: user.name }, token })
 }
 
-module.exports = {
-    getAUser,
-    getAllUser,
-    createUser,
-    updateUser,
-    deleteUser
-}
+const login = async (req, res) => {
+    const { email, password } = req.body
+  
+    if (!email || !password) {
+      throw new BadRequestError('Please provide email and password')
+    }
+  const user = await User.findOne({email}) 
+  if(!user){
+      throw new UnauthenticatedError('Invalid Credentials')
+  }
+  const isPasswordCorrect = await user.comparePassword(password)
+  if(!isPasswordCorrect) {
+      throw new UnauthenticatedError('Invalid Credentials')
+  }
+  // compare password
+  const token = user.createJWT()
+  res.status(StatusCodes.OK).json({ user: { name: user.name }, token})
+  }
+  
+  module.exports = {
+      register,
+      login,
+  } 

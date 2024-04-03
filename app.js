@@ -1,28 +1,47 @@
 const express = require('express')
 const app = express()
 
-// import dotenv
+// connecting to the Database(mongodb)
+const connectDB = require('./db/connectDB') 
+
+// importing the dotenv 
 require('dotenv').config()
 
-// import DB connection
-const connectDB = require('./db/connectDB')
-
-// import routes 
+// importing routes
+const orderRoute = require('./routes/orderRoute')
+const dockRoute = require('./routes/dockRoute')
+const transactionRoute = require('./routes/transRoute')
 const authRoute = require('./routes/authRoute')
-//  middlewares
+const oddRoute = require('./routes/oddRoute')
+
+// importing middlewares
+const errorHandlerMiddleware = require('./middlewares/error-handling')
+const notFound = require('./middlewares/notFound')
+const authenticateUser = require('./middlewares/auth')
+
+
 app.use(express.json())
 
-//  route usage
+// Routes
 app.use('/api/v1/auth', authRoute)
+app.use('/api/v1/order', orderRoute)
+app.use('/api/v1/dock',authenticateUser, dockRoute)
+app.use('/api/v1/transaction', authenticateUser, transactionRoute)
+app.use('/api/v1/odd',authenticateUser, oddRoute)
 
-//  
-const port = process.env.PORT || 3000
+app.use(errorHandlerMiddleware) 
+app.use(notFound)
+const Port = process.env.PORT || 3000
 
 const start = async () => {
-    await connectDB(process.env.MONGO_URI)
-    app.listen(port, () => {
-        console.log(`server is listening on ${port}...`);
-    })
+    try {
+        await connectDB(process.env.MONGO_URI)
+        app.listen(Port, () => {
+            console.log(`server is listening on port ${Port}...`);
+        })        
+    } catch (error) {
+        console.log(error); 
+    }
 }
 
 start()
