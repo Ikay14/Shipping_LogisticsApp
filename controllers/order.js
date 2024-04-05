@@ -5,10 +5,24 @@ const { StatusCodes } = require('http-status-codes');
 const { NotFound } = require('../errors');
 
 
-const getCursor = async (req, res) => {
-    const order = await orderSchema.find({})
-    res.status(StatusCodes.OK).json({ order, nbHits: order.length });
+const cursorQuery = async (req, res) => {
+    const { limit } = req.query
+    const filterQuery = {}
+    if (req.query._id) {
+        filterQuery._id = { $gt: ObjectId(req.query._id) }
+    }
+    try {
+        const orders = await orderSchema.find(filterQuery)
+                                        .sort({ _id: -1 })
+                                        .limit(limit)
+                                     
+const _id = orders.length > 0 ? orders[orders.length - 1]._id : null                               
+res.status(StatusCodes.OK).json({_id, list: orders, nbHits: orders.length })
+    } catch (error) {
+console.log(error)
 }
+    }                   
+
 
 const getAllOrder = async (req, res) => {
     const { sort } = req.query
@@ -92,27 +106,5 @@ module.exports = {
     createOrder,
     updateOrder,
     deleteOrder,
-    getCursor
-};
-
-
-
-//     const { limit } = req.query;
-//     const filterQuery = {};
-//     if (req.query._id) {
-//         filterQuery._id = { $lt: ObjectId(req.query._id) };
-//     }
-// try {
-    
-//     const orders = await orderSchema.find(filterQuery)
-//                                      .sort({ _id: -1 })
-//                                      .limit(limit)
-//                                      .toArray(); // Convert cursor to array
-
-//     const cursor = orders.length > 0 ? orders[orders.length - 1]._id : null;
-
-//     res.status(StatusCodes.OK).json({ orders, cursor });
-
-// } catch (error) {
-//     console.log(error);
-// }
+    cursorQuery
+}
