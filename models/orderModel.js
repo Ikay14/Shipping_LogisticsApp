@@ -1,6 +1,5 @@
 const mongoose = require('mongoose');
 
-
 // Define custom enum mapping
 const StatusEnum = {
     Paid: 0,
@@ -13,7 +12,6 @@ const OrderSchema = new mongoose.Schema({
         ref: 'User',
         required: true
     },
-       
     amount: {
         type: Number,
         trim: true,
@@ -40,11 +38,9 @@ const OrderSchema = new mongoose.Schema({
     }
 });
 
-// Define a virtual getter to convert enum values to string representations
+// Define virtual getter for statusString
 OrderSchema.virtual('statusString').get(function() {
     return this.status === StatusEnum.Paid ? 'Paid' : 'Not Paid';
 });
 
 module.exports = mongoose.model('Order', OrderSchema);
-
-

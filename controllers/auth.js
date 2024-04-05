@@ -8,7 +8,7 @@ const register = async (req, res) => {
     const token = user.createJWT()
     res
     .status(StatusCodes.CREATED)
-    .json({ user: {name: user.name }, token })
+    .json({ user: {name: user.name, _id: user._id}, token })
 }
 
 const login = async (req, res) => {
@@ -32,5 +32,5 @@ const login = async (req, res) => {
   
   module.exports = {
       register,
-      login,
+      login
   } 

@@ -27,7 +27,7 @@ app.use('/api/v1/auth', authRoute)
 app.use('/api/v1/order', orderRoute)
 app.use('/api/v1/dock',authenticateUser, dockRoute)
 app.use('/api/v1/transaction', authenticateUser, transactionRoute)
-app.use('/api/v1/odd',authenticateUser, oddRoute)
+app.use('/api/v1/orders/odd', oddRoute)
 
 app.use(errorHandlerMiddleware) 
 app.use(notFound)

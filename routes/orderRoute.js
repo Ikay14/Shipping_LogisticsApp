@@ -7,13 +7,13 @@ const {
     createOrder,
     updateOrder,
     deleteOrder,
-    getCursor
+    cursorQuery
 } = require('../controllers/order')
 
 
+router.route('/cursor').get(cursorQuery)
 router.route('/').get(getAllOrder).post(createOrder)
 router.route('/:id').get(getSingleOrder).patch(updateOrder).delete(deleteOrder)
-router.route('/cursor').get(getCursor)
 
 
 module.exports = router;
