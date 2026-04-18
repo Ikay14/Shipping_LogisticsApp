@@ -3,6 +3,7 @@ import { bucket } from "../config/firebase";
 import { BadRequestError } from "../errors/BadRequestError";
 import crypto from "crypto";
 import path from "path";
+import sharp from "sharp";
 
 /**
  * Custom service for uploading files to Firebase Cloud Storage.
@@ -16,18 +17,33 @@ export const StorageService = {
   async uploadFile(
     file: Express.Multer.File,
     folder: string = "general",
-  ): Promise<string> {
+    convertToWebP: boolean = false,
+  ): Promise<{ url: string; size: number }> {
     if (!bucket) {
       throw new Error("Firebase Storage bucket is not initialized");
     }
 
-    const fileExtension = path.extname(file.originalname);
+    let uploadBuffer = file.buffer;
+    let fileExtension = path.extname(file.originalname);
+    let mimeType = file.mimetype;
+
+    // High-performance image conversion if requested
+    if (
+      convertToWebP &&
+      mimeType.startsWith("image/") &&
+      mimeType !== "image/webp"
+    ) {
+      uploadBuffer = await sharp(file.buffer).webp({ quality: 80 }).toBuffer();
+      fileExtension = ".webp";
+      mimeType = "image/webp";
+    }
+
     const fileName = `${folder}/${crypto.randomUUID()}${fileExtension}`;
     const blob = bucket.file(fileName);
 
     const blobStream = blob.createWriteStream({
       metadata: {
-        contentType: file.mimetype,
+        contentType: mimeType,
       },
       resumable: false,
     });
@@ -38,14 +54,11 @@ export const StorageService = {
       });
 
       blobStream.on("finish", async () => {
-        // In a real app with Firebase project set to pay-as-you-go,
-        // you might use blob.makePublic() here if your bucket isn't public.
-        // For simplicity, we construct the Firebase storage URL format.
         const publicUrl = `https://firebasestorage.googleapis.com/v0/b/${bucket!.name}/o/${encodeURIComponent(fileName)}?alt=media`;
-        resolve(publicUrl);
+        resolve({ url: publicUrl, size: uploadBuffer.length });
       });
 
-      blobStream.end(file.buffer);
+      blobStream.end(uploadBuffer);
     });
   },
 
@@ -55,7 +68,6 @@ export const StorageService = {
   async deleteFile(fileUrl: string): Promise<void> {
     if (!bucket) return;
     try {
-      // Logic to extract path from URL and delete
       const pathPart = fileUrl.split("/o/")[1]?.split("?")[0];
       if (pathPart) {
         const decodedPath = decodeURIComponent(pathPart);
@@ -69,18 +81,40 @@ export const StorageService = {
 
 /**
  * Multer configuration for memory storage.
- * We store files in RAM temporarily then stream to Firebase.
+ * Evaluates inline request flags to process both Images and Secure Documents seamlessly.
  */
 export const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB limit
+    fileSize: 10 * 1024 * 1024, // Expanded to 10MB to handle large PDFs
   },
-  fileFilter: (_req, file, cb) => {
-    if (file.mimetype.startsWith("image/")) {
-      cb(null, true);
-    } else {
-      cb(new BadRequestError("Only images are allowed"));
+  fileFilter: (req, file, cb) => {
+    // Flags can be passed via Query String ?docs=true
+    const allowDocs = req.query?.docs === "true" || req.body?.docs === "true";
+
+    const isImage = file.mimetype.startsWith("image/");
+    const isDoc =
+      file.mimetype === "application/pdf" ||
+      file.mimetype === "application/msword" ||
+      file.mimetype ===
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+      file.mimetype === "text/csv";
+
+    if (isImage) {
+      return cb(null, true);
     }
+
+    if (allowDocs && isDoc) {
+      return cb(null, true);
+    }
+
+    cb(
+      new BadRequestError(
+        "Invalid file type. " +
+          (allowDocs
+            ? "Only images and documents allowed."
+            : "Only images are allowed."),
+      ),
+    );
   },
 });

@@ -4,6 +4,7 @@ import { BadRequestError } from "../../errors/BadRequestError";
 import { AuditService } from "../../services/AuditService";
 import { PasswordUtils } from "../../utils/password";
 import type { UpdateProfileInput, UserEntity } from "./auth.schema";
+import { StorageService } from "../../utils/upload";
 
 export const ProfileService = {
   /**
@@ -103,8 +104,13 @@ export const ProfileService = {
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new NotFoundError("User not found");
 
-    // In a real senior app, upload to S3/Cloudinary and get public URL
-    const publicUrl = `https://assets.storage.com/avatars/${userId}-${Date.now()}-${file.originalname}`;
+    // Upload to Firebase and automatically convert to WebP for optimal delivery
+    const result = await StorageService.uploadFile(
+      file,
+      `avatars/${userId}`,
+      true,
+    );
+    const publicUrl = result.url;
 
     await prisma.user.update({
       where: { id: userId },

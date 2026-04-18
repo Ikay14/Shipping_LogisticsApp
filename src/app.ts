@@ -19,6 +19,7 @@ import { orderRoutes } from "./modules/orders";
 import { dockRoutes } from "./modules/docks";
 import { transactionRoutes } from "./modules/transactions";
 import { activityLogRoutes } from "./modules/activity-logs";
+import { uploadRoutes } from "./modules/upload";
 
 const app: Application = express();
 
@@ -68,6 +69,7 @@ app.use(`${API_PREFIX}/orders`, orderRoutes);
 app.use(`${API_PREFIX}/docks`, dockRoutes);
 app.use(`${API_PREFIX}/transactions`, transactionRoutes);
 app.use(`${API_PREFIX}/activity-logs`, activityLogRoutes);
+app.use(`${API_PREFIX}/uploads`, uploadRoutes);
 
 app.use(notFound);
 app.use(errorHandler);
