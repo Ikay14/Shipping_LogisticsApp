@@ -1,8 +1,8 @@
-import { Prisma } from "@prisma/client";
+import { Prisma } from "../../generated/prisma/client";
 import { prisma } from "../../db/prisma";
 import { NotFoundError } from "../../errors/NotFoundError";
 import { BadRequestError } from "../../errors/BadRequestError";
-import { AuditService } from "../../services/AuditService";
+import { AuditService } from "../shared/service/AuditService";
 import type {
   CreateTransactionInput,
   UpdateTransactionInput,

@@ -3,6 +3,44 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
+/**
+ * Construct DATABASE_URL programmatically if not provided.
+ * This supports the user's preference for separate DB variables while
+ * satisfying Prisma's requirement for a single connection string.
+ */
+const { DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DB_NAME, DATABASE_URL } = process.env;
+if (!DATABASE_URL && DB_HOST) {
+  const userPass = DB_USER ? `${DB_USER}${DB_PASSWORD ? `:${DB_PASSWORD}` : ""}@` : "";
+  process.env.DATABASE_URL = `postgresql://${userPass}${DB_HOST}:${DB_PORT || 5432}/${DB_NAME}?schema=public`;
+}
+
+/**
+ * Handle Firebase naming inconsistencies.
+ */
+const firebaseEmail = process.env.FIREBASE_CLIENT_EMAIL || process.env.FIREBASE_EMAIL || process.env.FIREBASE_EMAIL_CLIENT;
+if (firebaseEmail) {
+  process.env.FIREBASE_CLIENT_EMAIL = firebaseEmail;
+}
+
+/**
+ * Handle Email/SMTP naming inconsistencies.
+ */
+if (!process.env.SMTP_HOST && process.env.MAIL_HOST) {
+  process.env.SMTP_HOST = process.env.MAIL_HOST;
+}
+if (!process.env.SMTP_PORT && process.env.MAIL_PORT) {
+  process.env.SMTP_PORT = process.env.MAIL_PORT;
+}
+if (!process.env.SMTP_USER && process.env.MAIL_USERNAME) {
+  process.env.SMTP_USER = process.env.MAIL_USERNAME;
+}
+if (!process.env.SMTP_PASS && process.env.MAIL_PASSWORD) {
+  process.env.SMTP_PASS = process.env.MAIL_PASSWORD;
+}
+if (!process.env.SMTP_SECURE && process.env.MAIL_SECURE) {
+  process.env.SMTP_SECURE = process.env.MAIL_SECURE;
+}
+
 const envSchema = z.object({
   NODE_ENV: z
     .enum(["development", "test", "production"])
@@ -10,7 +48,6 @@ const envSchema = z.object({
   PORT: z.string().default("3000"),
   APP_URL: z.string().url().default("http://localhost:3000"),
 
-  DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
   DB_TYPE: z.string().default("postgres"),
   DB_HOST: z.string().default("localhost"),
   DB_PORT: z.string().default("5432"),
@@ -18,6 +55,7 @@ const envSchema = z.object({
   DB_USER: z.string().optional(),
   DB_PASSWORD: z.string().optional(),
   DB_SSL: z.preprocess((v) => v === "true", z.boolean()).default(false),
+  DATABASE_URL: z.string().url("Invalid DATABASE_URL format"),
 
   JWT_SECRET: z.string().min(32, "JWT_SECRET must be at least 32 characters"),
   JWT_ACCESS_EXPIRES: z.string().default("15m"),

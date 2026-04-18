@@ -3,7 +3,7 @@ import { OrderController } from "./order.controller";
 import { authenticate } from "../../middlewares/authenticate";
 import { authorize } from "../../middlewares/authorize";
 import { validateRequest } from "../../middlewares/validateRequest";
-import { UserRole } from "@prisma/client";
+import { UserRole } from "../../generated/prisma/client";
 import {
   createOrderSchema,
   updateOrderSchema,

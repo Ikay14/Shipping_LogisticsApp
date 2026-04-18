@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { OrderStatus, OrderPriority } from "@prisma/client";
+import { OrderStatus, OrderPriority } from "../../generated/prisma/client";
 
 export const createOrderSchema = z.object({
   body: z.object({

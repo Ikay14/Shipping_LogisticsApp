@@ -1,7 +1,7 @@
 import { prisma } from "../../db/prisma";
 import { NotFoundError } from "../../errors/NotFoundError";
 import { BadRequestError } from "../../errors/BadRequestError";
-import { AuditService } from "../../services/AuditService";
+import { AuditService } from "../shared/service/AuditService";
 import { PasswordUtils } from "../../utils/password";
 import type { UpdateProfileInput, UserEntity } from "./auth.schema";
 import { StorageService } from "../../utils/upload";

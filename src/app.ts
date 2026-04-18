@@ -19,7 +19,7 @@ import { orderRoutes } from "./modules/orders";
 import { dockRoutes } from "./modules/docks";
 import { transactionRoutes } from "./modules/transactions";
 import { activityLogRoutes } from "./modules/activity-logs";
-import { uploadRoutes } from "./modules/upload";
+import { uploadRoutes } from "./modules/shared/index";
 
 const app: Application = express();
 
@@ -39,6 +39,8 @@ app.use(sanitize); // Data sanitization against XSS
 app.use(apiLimiter); // Rate limiting
 
 app.use(activityLogger); // Audit trail for database mutations
+
+const API_PREFIX = "/api/v1";
 
 /**
  * Proactive Health Check.
@@ -61,8 +63,6 @@ app.get("/health", async (_req: Request, res: Response) => {
     res.status(StatusCodes.SERVICE_UNAVAILABLE).send(healthcheck);
   }
 });
-
-const API_PREFIX = "/api/v1";
 
 app.use(`${API_PREFIX}/auth`, authRoutes);
 app.use(`${API_PREFIX}/orders`, orderRoutes);

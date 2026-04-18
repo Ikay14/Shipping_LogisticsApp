@@ -1,7 +1,7 @@
 import { prisma } from "../../db/prisma";
 import { NotFoundError } from "../../errors/NotFoundError";
 import { BadRequestError } from "../../errors/BadRequestError";
-import { AuditService } from "../../services/AuditService";
+import { AuditService } from "../shared/service/AuditService";
 import { DOCK_MESSAGES } from "../../constants/messages";
 import type { CreateDockInput, UpdateDockInput } from "./dock.schema";
 import {

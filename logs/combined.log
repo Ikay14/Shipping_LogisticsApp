@@ -158,3 +158,46 @@
 2026-04-18 14:44:55:4455 [32minfo[39m: [32m📦 Environment: development[39m
 2026-04-18 14:51:04:514 [33mwarn[39m: [33m[39m
 [33mSIGINT received. Shutting down gracefully...[39m
+2026-04-18 15:07:36:736 [32minfo[39m: [32m✅ Database connected successfully[39m
+2026-04-18 15:07:36:736 [32minfo[39m: [32m🚀 Server running on http://localhost:3000[39m
+2026-04-18 15:07:36:736 [32minfo[39m: [32m📦 Environment: development[39m
+2026-04-18 17:27:44:2744 [32minfo[39m: [32m✅ Database connected successfully[39m
+2026-04-18 17:27:44:2744 [32minfo[39m: [32m🚀 Server running on http://localhost:3000[39m
+2026-04-18 17:27:44:2744 [32minfo[39m: [32m📦 Environment: development[39m
+2026-04-18 17:33:54:3354 [32minfo[39m: [32m✅ Database connected successfully[39m
+2026-04-18 17:33:54:3354 [32minfo[39m: [32m🚀 Server running on http://localhost:3000[39m
+2026-04-18 17:33:54:3354 [32minfo[39m: [32m📦 Environment: development[39m
+2026-04-18 17:34:47:3447 [33mwarn[39m: [33m[39m
+[33mSIGINT received. Shutting down gracefully...[39m
+2026-04-18 17:36:40:3640 [32minfo[39m: [32m✅ Database connected successfully[39m
+2026-04-18 17:36:40:3640 [32minfo[39m: [32m🚀 Server running on http://localhost:3000[39m
+2026-04-18 17:36:40:3640 [32minfo[39m: [32m📦 Environment: development[39m
+2026-04-18 17:37:27:3727 [32minfo[39m: [32m✅ Database connected successfully[39m
+2026-04-18 17:37:27:3727 [32minfo[39m: [32m🚀 Server running on http://localhost:3000[39m
+2026-04-18 17:37:27:3727 [32minfo[39m: [32m📦 Environment: development[39m
+2026-04-18 17:41:18:4118 [32minfo[39m: [32m[0mGET /api/v1/health [33m404[0m 79.042 ms - 64[0m[39m
+2026-04-18 17:43:20:4320 [32minfo[39m: [32m✅ Database connected successfully[39m
+2026-04-18 17:43:20:4320 [32minfo[39m: [32m🚀 Server running on http://localhost:3000[39m
+2026-04-18 17:43:20:4320 [32minfo[39m: [32m📦 Environment: development[39m
+2026-04-18 17:45:24:4524 [32minfo[39m: [32m✅ Database connected successfully[39m
+2026-04-18 17:45:24:4524 [32minfo[39m: [32m🚀 Server running on http://localhost:3000[39m
+2026-04-18 17:45:24:4524 [32minfo[39m: [32m📦 Environment: development[39m
+2026-04-18 17:45:34:4534 [32minfo[39m: [32m✅ Database connected successfully[39m
+2026-04-18 17:45:34:4534 [32minfo[39m: [32m🚀 Server running on http://localhost:3000[39m
+2026-04-18 17:45:34:4534 [32minfo[39m: [32m📦 Environment: development[39m
+2026-04-18 17:45:53:4553 [32minfo[39m: [32m[0mGET /health [32m200[0m 229.037 ms - 79[0m[39m
+2026-04-18 17:48:32:4832 [32minfo[39m: [32m[0mPOST /auth/register [33m404[0m 933.952 ms - 65[0m[39m
+2026-04-18 17:48:54:4854 [32minfo[39m: [32m[0mPOST /api/v1/auth/register [32m201[0m 1244.929 ms - 1066[0m[39m
+2026-04-18 17:52:02:522 [32minfo[39m: [32m✅ Database connected successfully[39m
+2026-04-18 17:52:02:522 [32minfo[39m: [32m🚀 Server running on http://localhost:3000[39m
+2026-04-18 17:52:02:522 [32minfo[39m: [32m📦 Environment: development[39m
+2026-04-18 17:52:38:5238 [32minfo[39m: [32m[0mPOST /api/v1/auth/resend-verification [32m200[0m 483.621 ms - 89[0m[39m
+2026-04-18 17:54:17:5417 [32minfo[39m: [32m✅ Database connected successfully[39m
+2026-04-18 17:54:17:5417 [32minfo[39m: [32m🚀 Server running on http://localhost:3000[39m
+2026-04-18 17:54:17:5417 [32minfo[39m: [32m📦 Environment: development[39m
+2026-04-18 17:57:07:577 [32minfo[39m: [32m✅ Database connected successfully[39m
+2026-04-18 17:57:07:577 [32minfo[39m: [32m🚀 Server running on http://localhost:3000[39m
+2026-04-18 17:57:07:577 [32minfo[39m: [32m📦 Environment: development[39m
+2026-04-18 17:57:16:5716 [32minfo[39m: [32m[0mPOST /api/v1/auth/resend-verification [32m200[0m 464.684 ms - 89[0m[39m
+2026-04-18 17:57:16:5716 [32minfo[39m: [32m[0mPOST /api/v1/auth/resend-verification [32m200[0m 265.574 ms - 89[0m[39m
+2026-04-18 17:57:18:5718 [32minfo[39m: [32m[0mPOST /api/v1/auth/resend-verification [32m200[0m 22.830 ms - 89[0m[39m
