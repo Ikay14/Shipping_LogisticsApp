@@ -22,6 +22,25 @@ if (firebaseEmail) {
   process.env.FIREBASE_CLIENT_EMAIL = firebaseEmail;
 }
 
+/**
+ * Handle Email/SMTP naming inconsistencies.
+ */
+if (!process.env.SMTP_HOST && process.env.MAIL_HOST) {
+  process.env.SMTP_HOST = process.env.MAIL_HOST;
+}
+if (!process.env.SMTP_PORT && process.env.MAIL_PORT) {
+  process.env.SMTP_PORT = process.env.MAIL_PORT;
+}
+if (!process.env.SMTP_USER && process.env.MAIL_USERNAME) {
+  process.env.SMTP_USER = process.env.MAIL_USERNAME;
+}
+if (!process.env.SMTP_PASS && process.env.MAIL_PASSWORD) {
+  process.env.SMTP_PASS = process.env.MAIL_PASSWORD;
+}
+if (!process.env.SMTP_SECURE && process.env.MAIL_SECURE) {
+  process.env.SMTP_SECURE = process.env.MAIL_SECURE;
+}
+
 const envSchema = z.object({
   NODE_ENV: z
     .enum(["development", "test", "production"])
