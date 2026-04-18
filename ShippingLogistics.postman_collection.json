@@ -1,0 +1,552 @@
+{
+  "info": {
+    "name": "Shipping Logistics API",
+    "description": "Complete API collection for the Shipping Logistics Platform.\n\n## Setup\n1. Set the `baseUrl` variable to your server (default: `http://localhost:3000`)\n2. Use `POST /auth/login` or `POST /auth/register` — the collection auto-saves the token.\n3. All protected routes automatically use the `{{accessToken}}` variable.\n\n## Flag Reference\n- `?webp=true` — Converts uploaded images to WebP format before storing\n- `?docs=true` — Allows document uploads (PDF, CSV, DOCX) in addition to images\n- `?page=1&limit=10` — Standard pagination for all list endpoints",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000/api/v1", "type": "string" },
+    { "key": "accessToken", "value": "", "type": "string" },
+    { "key": "refreshToken", "value": "", "type": "string" }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+  },
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/../../health", "host": ["{{baseUrl}}"], "path": ["health"] },
+            "description": "Checks database connectivity and server uptime."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "description": "Identity and access management endpoints.",
+      "item": [
+        {
+          "name": "Register",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.data?.accessToken) pm.collectionVariables.set('accessToken', json.data.accessToken);",
+                  "if (json.data?.refreshToken) pm.collectionVariables.set('refreshToken', json.data.refreshToken);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"John Doe\",\n  \"email\": \"john.doe@example.com\",\n  \"phone\": \"+2348011223344\",\n  \"password\": \"SecurePass@123\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/register", "host": ["{{baseUrl}}"], "path": ["auth", "register"] }
+          }
+        },
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.data?.accessToken) pm.collectionVariables.set('accessToken', json.data.accessToken);",
+                  "if (json.data?.refreshToken) pm.collectionVariables.set('refreshToken', json.data.refreshToken);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"john.doe@example.com\",\n  \"password\": \"SecurePass@123\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] }
+          }
+        },
+        {
+          "name": "Refresh Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.data?.accessToken) pm.collectionVariables.set('accessToken', json.data.accessToken);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/refresh", "host": ["{{baseUrl}}"], "path": ["auth", "refresh"] }
+          }
+        },
+        {
+          "name": "Forgot Password",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"john.doe@example.com\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/forgot-password", "host": ["{{baseUrl}}"], "path": ["auth", "forgot-password"] }
+          }
+        },
+        {
+          "name": "Reset Password",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"RESET_TOKEN_FROM_EMAIL\",\n  \"password\": \"NewSecurePass@123\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/reset-password", "host": ["{{baseUrl}}"], "path": ["auth", "reset-password"] }
+          }
+        },
+        {
+          "name": "Verify Email",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"EMAIL_VERIFICATION_TOKEN\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/verify-email", "host": ["{{baseUrl}}"], "path": ["auth", "verify-email"] }
+          }
+        },
+        {
+          "name": "Resend Verification",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"john.doe@example.com\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/resend-verification", "host": ["{{baseUrl}}"], "path": ["auth", "resend-verification"] }
+          }
+        },
+        {
+          "name": "Verify 2FA Login",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"mfaToken\": \"MFA_SESSION_TOKEN\",\n  \"code\": \"123456\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/2fa/verify", "host": ["{{baseUrl}}"], "path": ["auth", "2fa", "verify"] }
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/logout", "host": ["{{baseUrl}}"], "path": ["auth", "logout"] }
+          }
+        },
+        {
+          "name": "Get My Profile",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/auth/me", "host": ["{{baseUrl}}"], "path": ["auth", "me"] }
+          }
+        },
+        {
+          "name": "Update Profile (PATCH)",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"John Updated\",\n  \"phone\": \"+2348099887766\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/profile", "host": ["{{baseUrl}}"], "path": ["auth", "profile"] }
+          }
+        },
+        {
+          "name": "Update Profile (PUT)",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"John Doe Full\",\n  \"phone\": \"+2348099887766\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/profile", "host": ["{{baseUrl}}"], "path": ["auth", "profile"] }
+          }
+        },
+        {
+          "name": "Change Password",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"currentPassword\": \"SecurePass@123\",\n  \"newPassword\": \"NewSecurePass@456\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/change-password", "host": ["{{baseUrl}}"], "path": ["auth", "change-password"] }
+          }
+        },
+        {
+          "name": "Setup 2FA",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/auth/2fa/setup", "host": ["{{baseUrl}}"], "path": ["auth", "2fa", "setup"] }
+          }
+        },
+        {
+          "name": "Activate 2FA",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"123456\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/2fa/activate", "host": ["{{baseUrl}}"], "path": ["auth", "2fa", "activate"] }
+          }
+        },
+        {
+          "name": "Upload Avatar",
+          "request": {
+            "method": "POST",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "avatar", "type": "file", "src": [], "description": "Profile image (auto-converted to WebP)" }
+              ]
+            },
+            "url": { "raw": "{{baseUrl}}/auth/avatar", "host": ["{{baseUrl}}"], "path": ["auth", "avatar"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Orders",
+      "description": "Parcel and shipment order management. All routes require authentication.",
+      "item": [
+        {
+          "name": "Get All Orders",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/orders?page=1&limit=10&status=PENDING",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" },
+                { "key": "status", "value": "PENDING", "description": "PENDING | IN_TRANSIT | DELIVERED | CANCELLED" },
+                { "key": "priority", "value": "", "disabled": true },
+                { "key": "search", "value": "", "disabled": true }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Order by ID",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/orders/:id", "host": ["{{baseUrl}}"], "path": ["orders", ":id"], "variable": [{ "key": "id", "value": "ORDER_ID_HERE" }] }
+          }
+        },
+        {
+          "name": "Track by Tracking Number",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/orders/track/:trackingNumber", "host": ["{{baseUrl}}"], "path": ["orders", "track", ":trackingNumber"], "variable": [{ "key": "trackingNumber", "value": "SL-1234-5678-90" }] }
+          }
+        },
+        {
+          "name": "Create Order",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"USER_ID\",\n  \"recipientName\": \"Jane Smith\",\n  \"recipientPhone\": \"+2348055443322\",\n  \"recipientAddress\": \"123 Lagos Street, Ikeja\",\n  \"weight\": 2.5,\n  \"description\": \"Electronics package\",\n  \"priority\": \"STANDARD\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/orders", "host": ["{{baseUrl}}"], "path": ["orders"] }
+          }
+        },
+        {
+          "name": "Update Order Status (Staff+)",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"IN_TRANSIT\",\n  \"notes\": \"Picked up from warehouse\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/orders/:id/status", "host": ["{{baseUrl}}"], "path": ["orders", ":id", "status"], "variable": [{ "key": "id", "value": "ORDER_ID_HERE" }] }
+          }
+        },
+        {
+          "name": "Update Order (Manager+)",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"recipientAddress\": \"456 Updated Address, Lagos\",\n  \"description\": \"Updated description\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/orders/:id", "host": ["{{baseUrl}}"], "path": ["orders", ":id"], "variable": [{ "key": "id", "value": "ORDER_ID_HERE" }] }
+          }
+        },
+        {
+          "name": "Delete Order (Admin)",
+          "request": {
+            "method": "DELETE",
+            "url": { "raw": "{{baseUrl}}/orders/:id", "host": ["{{baseUrl}}"], "path": ["orders", ":id"], "variable": [{ "key": "id", "value": "ORDER_ID_HERE" }] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Shipping Docks",
+      "description": "Dock/warehouse facility management. All routes require authentication.",
+      "item": [
+        {
+          "name": "Get All Docks",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/docks?page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["docks"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Dock by ID",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/docks/:id", "host": ["{{baseUrl}}"], "path": ["docks", ":id"], "variable": [{ "key": "id", "value": "DOCK_ID_HERE" }] }
+          }
+        },
+        {
+          "name": "Create Dock (Manager+)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Lagos Central Dock\",\n  \"code\": \"LGS-01\",\n  \"location\": \"Apapa, Lagos\",\n  \"address\": \"10 Dockyard Road, Apapa\",\n  \"capacity\": 1000,\n  \"managerId\": \"MANAGER_USER_ID\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/docks", "host": ["{{baseUrl}}"], "path": ["docks"] }
+          }
+        },
+        {
+          "name": "Update Dock (Manager+)",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"capacity\": 1500,\n  \"status\": \"ACTIVE\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/docks/:id", "host": ["{{baseUrl}}"], "path": ["docks", ":id"], "variable": [{ "key": "id", "value": "DOCK_ID_HERE" }] }
+          }
+        },
+        {
+          "name": "Delete Dock (Manager+)",
+          "request": {
+            "method": "DELETE",
+            "url": { "raw": "{{baseUrl}}/docks/:id", "host": ["{{baseUrl}}"], "path": ["docks", ":id"], "variable": [{ "key": "id", "value": "DOCK_ID_HERE" }] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Transactions",
+      "description": "Financial transaction management. All routes require authentication.",
+      "item": [
+        {
+          "name": "Get All Transactions",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/transactions?page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["transactions"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Transaction by ID",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/transactions/:id", "host": ["{{baseUrl}}"], "path": ["transactions", ":id"], "variable": [{ "key": "id", "value": "TRANSACTION_ID_HERE" }] }
+          }
+        },
+        {
+          "name": "Create Transaction (Manager+)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"USER_ID\",\n  \"orderId\": \"ORDER_ID\",\n  \"shippingDockId\": \"DOCK_ID\",\n  \"amount\": 5000,\n  \"type\": \"PAYMENT\",\n  \"description\": \"Shipping fee for order SL-1234\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/transactions", "host": ["{{baseUrl}}"], "path": ["transactions"] }
+          }
+        },
+        {
+          "name": "Update Transaction (Manager+)",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"COMPLETED\",\n  \"description\": \"Payment confirmed\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/transactions/:id", "host": ["{{baseUrl}}"], "path": ["transactions", ":id"], "variable": [{ "key": "id", "value": "TRANSACTION_ID_HERE" }] }
+          }
+        },
+        {
+          "name": "Delete Transaction (Admin)",
+          "request": {
+            "method": "DELETE",
+            "url": { "raw": "{{baseUrl}}/transactions/:id", "host": ["{{baseUrl}}"], "path": ["transactions", ":id"], "variable": [{ "key": "id", "value": "TRANSACTION_ID_HERE" }] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Activity Logs",
+      "description": "Security and audit trail endpoints. All routes require authentication.",
+      "item": [
+        {
+          "name": "Get All Logs (Admin)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/activity-logs?page=1&limit=50&userId=",
+              "host": ["{{baseUrl}}"],
+              "path": ["activity-logs"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "50" },
+                { "key": "userId", "value": "", "description": "Optional: filter by a specific user", "disabled": true }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get My Activity Logs",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/activity-logs/me?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["activity-logs", "me"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Uploads",
+      "description": "Global media upload endpoints backed by Firebase Cloud Storage.\n\n**Flags:**\n- `?webp=true` — Convert image to WebP before storing (recommended for avatars/thumbnails)\n- `?docs=true` — Allow document uploads (PDF, CSV, DOCX)",
+      "item": [
+        {
+          "name": "Upload Single File",
+          "request": {
+            "method": "POST",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "file", "type": "file", "src": [], "description": "Any image file. Add ?docs=true to allow PDFs/CSVs." }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/uploads/single?webp=true",
+              "host": ["{{baseUrl}}"],
+              "path": ["uploads", "single"],
+              "query": [
+                { "key": "webp", "value": "true", "description": "Convert image to WebP" },
+                { "key": "docs", "value": "true", "description": "Allow document types", "disabled": true }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Upload Multiple Files",
+          "request": {
+            "method": "POST",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "files", "type": "file", "src": [], "description": "File 1" },
+                { "key": "files", "type": "file", "src": [], "description": "File 2 (max 10)" }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/uploads/multiple",
+              "host": ["{{baseUrl}}"],
+              "path": ["uploads", "multiple"],
+              "query": [
+                { "key": "webp", "value": "true", "description": "Convert all images to WebP", "disabled": true },
+                { "key": "docs", "value": "true", "description": "Allow document types", "disabled": true }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -156,3 +156,5 @@
 2026-04-18 14:44:55:4455 [32minfo[39m: [32m✅ Database connected successfully[39m
 2026-04-18 14:44:55:4455 [32minfo[39m: [32m🚀 Server running on http://localhost:3000[39m
 2026-04-18 14:44:55:4455 [32minfo[39m: [32m📦 Environment: development[39m
+2026-04-18 14:51:04:514 [33mwarn[39m: [33m[39m
+[33mSIGINT received. Shutting down gracefully...[39m
