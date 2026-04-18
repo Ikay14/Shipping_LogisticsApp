@@ -1,14 +1,14 @@
-import { authenticator } from "otplib";
+import { TOTP, generateSecret, generateURI, verify } from "otplib";
 import QRCode from "qrcode";
 import { prisma } from "../../db/prisma";
 import { signToken, signRefreshToken, verifyToken } from "../../utils/jwt";
 import { BadRequestError } from "../../errors/BadRequestError";
 import { UnauthenticatedError } from "../../errors/UnauthenticatedError";
 import { ForbiddenError } from "../../errors/ForbiddenError";
-import { UserEntity, AuthResponse } from "../../entities";
+import { UserEntity, AuthResponse } from "../shared/entities";
 import { PasswordUtils } from "../../utils/password";
-import { emailService } from "../../utils/email";
-import { AuditService } from "../../services/AuditService";
+import { emailService } from "../shared/service/email/index";
+import { AuditService } from "../shared/service/AuditService";
 import { DeviceInfo } from "../../utils/device";
 import { AUTH_MESSAGES } from "../../constants/messages";
 import { TokenExpiration } from "../../config/auth.config";
@@ -273,7 +273,7 @@ export const AuthService = {
       throw new BadRequestError(AUTH_MESSAGES.MFA_NOT_CONFIGURED);
     }
 
-    const isValid = authenticator.verify({
+    const isValid = verify({
       token: code,
       secret: (user as any).twoFactorSecret,
     });
@@ -322,12 +322,12 @@ export const AuthService = {
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new BadRequestError(AUTH_MESSAGES.USER_NOT_FOUND);
 
-    const secret = authenticator.generateSecret();
-    const otpauth = authenticator.keyuri(
-      user.email,
-      "Shipping Logistics",
-      secret,
-    );
+    const secret = generateSecret();
+    const otpauth = generateURI({
+      label: user.email,
+      issuer: "Shipping Logistics",
+      secret: secret,
+    });
     const qrCode = await QRCode.toDataURL(otpauth);
 
     // Save secret temporarily (we don't enable it yet)
@@ -352,7 +352,7 @@ export const AuthService = {
       throw new BadRequestError(AUTH_MESSAGES.MFA_SETUP_NOT_INITIATED);
     }
 
-    const isValid = authenticator.verify({
+    const isValid = verify({
       token: code,
       secret: (user as any).twoFactorSecret,
     });

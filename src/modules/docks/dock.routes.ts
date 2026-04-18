@@ -3,7 +3,7 @@ import { DockController } from "./dock.controller";
 import { authenticate } from "../../middlewares/authenticate";
 import { authorize } from "../../middlewares/authorize";
 import { validateRequest } from "../../middlewares/validateRequest";
-import { UserRole } from "@prisma/client";
+import { UserRole } from "../../generated/prisma/client";
 import {
   createDockSchema,
   updateDockSchema,

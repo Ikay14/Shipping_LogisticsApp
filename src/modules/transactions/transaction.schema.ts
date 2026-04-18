@@ -3,17 +3,15 @@ import {
   TransactionType,
   TransactionStatus,
   PaymentMethod,
-} from "@prisma/client";
+} from "../../generated/prisma/client";
 
 export const createTransactionSchema = z.object({
   body: z.object({
-    userId: z.string({ required_error: "userId is required" }).uuid(),
-    orderId: z.string({ required_error: "orderId is required" }).uuid(),
-    shippingDockId: z
-      .string({ required_error: "shippingDockId is required" })
-      .uuid(),
+    userId: z.string({ error: "userId is required" }).uuid(),
+    orderId: z.string({ error: "orderId is required" }).uuid(),
+    shippingDockId: z.string({ error: "shippingDockId is required" }).uuid(),
     amount: z
-      .number({ required_error: "amount is required" })
+      .number({ error: "amount is required" })
       .positive("amount must be positive"),
     currency: z
       .string()
@@ -22,16 +20,16 @@ export const createTransactionSchema = z.object({
     type: z.nativeEnum(TransactionType).default(TransactionType.PAYMENT),
     paymentMethod: z.nativeEnum(PaymentMethod).default(PaymentMethod.CASH),
     notes: z.string().max(500).optional(),
-    metadata: z.record(z.unknown()).optional(),
+    metadata: z.record(z.string(), z.unknown()).optional(),
   }),
 });
 
 export const updateTransactionSchema = z.object({
   params: z.object({ id: z.string().uuid("id must be a valid UUID") }),
   body: z.object({
-    status: z.nativeEnum(TransactionStatus).optional(),
+    status: z.enum(["PENDING", "COMPLETED", "FAILED", "REVERSED"]),
     notes: z.string().max(500).optional(),
-    metadata: z.record(z.unknown()).optional(),
+    metadata: z.record(z.string(), z.unknown()).optional(),
   }),
 });
 

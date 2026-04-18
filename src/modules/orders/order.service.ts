@@ -1,8 +1,8 @@
 import { prisma } from "../../db/prisma";
 import { NotFoundError } from "../../errors/NotFoundError";
 import { BadRequestError } from "../../errors/BadRequestError";
-import { AuditService } from "../../services/AuditService";
-import { OrderStatus } from "@prisma/client";
+import { AuditService } from "../shared/service/AuditService";
+import { OrderStatus } from "../../generated/prisma/client";
 import { ORDER_MESSAGES } from "../../constants/messages";
 import {
   getPaginationOptions,

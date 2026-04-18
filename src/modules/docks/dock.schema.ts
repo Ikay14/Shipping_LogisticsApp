@@ -1,19 +1,19 @@
 import { z } from "zod";
-import { DockStatus } from "@prisma/client";
+import { DockStatus } from "../../generated/prisma/client";
 
 export const createDockSchema = z.object({
   body: z.object({
     name: z
-      .string({ required_error: "name is required" })
+      .string({ error: "name is required" })
       .min(2, "name must be at least 2 characters")
       .max(100),
     code: z
-      .string({ required_error: "code is required" })
+      .string({ error: "code is required" })
       .min(2, "code must be at least 2 characters")
       .max(20)
       .transform((v) => v.toUpperCase()),
     location: z
-      .string({ required_error: "location is required" })
+      .string({ error: "location is required" })
       .min(3, "location must be at least 3 characters"),
     address: z.string().optional(),
     capacity: z.number().int().positive().default(100),

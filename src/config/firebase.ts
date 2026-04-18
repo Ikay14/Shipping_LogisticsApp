@@ -40,7 +40,8 @@ const initializeFirebase = () => {
 
 initializeFirebase();
 
-export const bucket = env.FIREBASE_STORAGE_BUCKET
-  ? admin.storage().bucket()
-  : null;
+export const bucket =
+  env.FIREBASE_STORAGE_BUCKET && admin.apps.length > 0
+    ? admin.storage().bucket()
+    : null;
 export default admin;

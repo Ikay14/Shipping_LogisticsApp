@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { StatusCodes } from "http-status-codes";
-import { Prisma } from "@prisma/client";
+import { Prisma } from "../generated/prisma/client";
 import { ApiError } from "../errors/ApiError";
 import { env } from "../config/env";
 
