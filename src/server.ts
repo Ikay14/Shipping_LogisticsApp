@@ -1,5 +1,5 @@
 import { env } from "./config/env";
-import { prisma } from "./db/prisma";
+import { prisma, pool } from "./db/prisma";
 import app from "./app";
 import { logger } from "./utils/logger";
 
@@ -38,6 +38,7 @@ const start = async (): Promise<void> => {
         clearTimeout(timeout);
         try {
           await prisma.$disconnect();
+          await pool.end();
           logger.info("✅ Database disconnected. Process exiting.");
           process.exit(0);
         } catch (error) {

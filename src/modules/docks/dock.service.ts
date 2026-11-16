@@ -21,7 +21,7 @@ export const DockService = {
         take,
         include: {
           manager: { select: { id: true, name: true, email: true } },
-          _count: { select: { transactions: true } } as any,
+          _count: { select: { transactions: true } },
         },
       }),
       prisma.shippingDock.count(),
@@ -43,7 +43,7 @@ export const DockService = {
             order: { select: { id: true, trackingNumber: true, status: true } },
           },
         },
-        _count: { select: { transactions: true } } as any,
+        _count: { select: { transactions: true } },
       },
     });
 
@@ -116,7 +116,7 @@ export const DockService = {
 
     const updated = await prisma.shippingDock.update({
       where: { id },
-      data: input as any,
+      data: input,
       include: { manager: { select: { name: true } } },
     });
 
@@ -128,7 +128,7 @@ export const DockService = {
       metadata: {
         changes: Object.keys(input),
         statusChange: input.status
-          ? { from: (existing as any).status, to: input.status }
+          ? { from: existing.status, to: input.status }
           : undefined,
       },
     });
@@ -139,15 +139,14 @@ export const DockService = {
   async delete(id: string, actorId?: string) {
     const existing = await prisma.shippingDock.findUnique({
       where: { id },
-      include: { _count: { select: { transactions: true } } } as any,
+      include: { _count: { select: { transactions: true } } },
     });
 
     if (!existing)
       throw new NotFoundError(`Shipping dock with id ${id} not found`);
 
     // Safety check: Cannot delete a dock with active associations
-    const stats = existing as any;
-    if (stats._count?.transactions > 0) {
+    if (existing._count.transactions > 0) {
       throw new BadRequestError(
         "Cannot delete a dock that has associated transactions. Deactivate it instead.",
       );
@@ -160,7 +159,7 @@ export const DockService = {
       action: "DOCK_DELETED",
       entity: "shipping_dock",
       entityId: id,
-      metadata: { name: (existing as any).name, code: (existing as any).code },
+      metadata: { name: existing.name, code: existing.code },
     });
   },
 };

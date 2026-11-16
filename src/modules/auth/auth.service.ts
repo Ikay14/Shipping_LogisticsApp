@@ -1,4 +1,4 @@
-import { TOTP, generateSecret, generateURI, verify } from "otplib";
+import { generateSecret, generateURI, verify } from "otplib";
 import QRCode from "qrcode";
 import { prisma } from "../../db/prisma";
 import { signToken, signRefreshToken, verifyToken } from "../../utils/jwt";
@@ -100,7 +100,7 @@ export const AuthService = {
 
     const hashedPassword = await PasswordUtils.hash(data.password);
 
-    const user = await (prisma.user as any).create({
+    const user = await prisma.user.create({
       data: {
         name: data.name,
         email: data.email,
@@ -203,7 +203,7 @@ export const AuthService = {
       throw new ForbiddenError(AUTH_MESSAGES.EMAIL_NOT_VERIFIED);
     }
 
-    if ((user as any).isTwoFactorEnabled) {
+    if (user.isTwoFactorEnabled) {
       const mfaToken = PasswordUtils.generateRandomToken();
 
       await prisma.userToken.create({
@@ -228,7 +228,7 @@ export const AuthService = {
         data: {
           lastLoginAt: new Date(),
           currentLoginIp: context.ipAddress,
-        } as any,
+        },
       }),
       AuditService.recordLoginAttempt({
         userId: user.id,
@@ -269,13 +269,13 @@ export const AuthService = {
 
     const { user } = userToken;
 
-    if (!(user as any).twoFactorSecret) {
+    if (!user.twoFactorSecret) {
       throw new BadRequestError(AUTH_MESSAGES.MFA_NOT_CONFIGURED);
     }
 
     const isValid = verify({
       token: code,
-      secret: (user as any).twoFactorSecret,
+      secret: user.twoFactorSecret,
     });
 
     if (!isValid) {
@@ -297,7 +297,7 @@ export const AuthService = {
         data: {
           lastLoginAt: new Date(),
           currentLoginIp: context.ipAddress,
-        } as any,
+        },
       }),
       AuditService.recordLoginAttempt({
         userId: user.id,
@@ -331,7 +331,7 @@ export const AuthService = {
     const qrCode = await QRCode.toDataURL(otpauth);
 
     // Save secret temporarily (we don't enable it yet)
-    await (prisma.user as any).update({
+    await prisma.user.update({
       where: { id: userId },
       data: {
         twoFactorSecret: secret,
@@ -348,20 +348,20 @@ export const AuthService = {
   async activate2FA(userId: string, code: string): Promise<void> {
     const user = await prisma.user.findUnique({ where: { id: userId } });
 
-    if (!user || !(user as any).twoFactorSecret) {
+    if (!user || !user.twoFactorSecret) {
       throw new BadRequestError(AUTH_MESSAGES.MFA_SETUP_NOT_INITIATED);
     }
 
     const isValid = verify({
       token: code,
-      secret: (user as any).twoFactorSecret,
+      secret: user.twoFactorSecret,
     });
 
     if (!isValid) {
       throw new BadRequestError(AUTH_MESSAGES.MFA_INVALID);
     }
 
-    await (prisma.user as any).update({
+    await prisma.user.update({
       where: { id: userId },
       data: { isTwoFactorEnabled: true },
     });
