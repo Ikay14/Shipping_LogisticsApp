@@ -1,8 +1,15 @@
+import crypto from "crypto";
 import { prisma } from "../../db/prisma";
 import { NotFoundError } from "../../errors/NotFoundError";
 import { BadRequestError } from "../../errors/BadRequestError";
+import { ForbiddenError } from "../../errors/ForbiddenError";
 import { AuditService } from "../shared/service/AuditService";
-import { OrderStatus } from "../../generated/prisma/client";
+import {
+  DockStatus,
+  OrderStatus,
+  Prisma,
+  UserRole,
+} from "../../generated/prisma/client";
 import { ORDER_MESSAGES } from "../../constants/messages";
 import {
   getPaginationOptions,
@@ -21,7 +28,7 @@ import type {
 const generateTrackingNumber = (): string => {
   const prefix = "SL";
   const timestamp = Date.now().toString(10).slice(-8);
-  const random = Math.floor(1000 + Math.random() * 9000).toString();
+  const random = crypto.randomInt(1000, 10000).toString();
   const base = `${timestamp}${random}`;
 
   let sum = 0;
@@ -36,6 +43,54 @@ const generateTrackingNumber = (): string => {
   const checksum = (10 - (sum % 10)) % 10;
 
   return `${prefix}-${base.slice(0, 4)}-${base.slice(4, 8)}-${base.slice(8)}${checksum}`;
+};
+
+const VALID_ORDER_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
+  [OrderStatus.PENDING]: [OrderStatus.PAID, OrderStatus.CANCELLED],
+  [OrderStatus.PAID]: [OrderStatus.PROCESSING, OrderStatus.CANCELLED],
+  [OrderStatus.PROCESSING]: [OrderStatus.SHIPPED, OrderStatus.CANCELLED],
+  [OrderStatus.SHIPPED]: [OrderStatus.DELIVERED],
+  [OrderStatus.DELIVERED]: [],
+  [OrderStatus.CANCELLED]: [],
+};
+
+const validateDocks = async (
+  originDockId?: string | null,
+  destinationDockId?: string | null,
+): Promise<void> => {
+  if (originDockId && destinationDockId && originDockId === destinationDockId) {
+    throw new BadRequestError(
+      "Origin dock and destination dock cannot be the same",
+    );
+  }
+
+  const [originDock, destinationDock] = await Promise.all([
+    originDockId
+      ? prisma.shippingDock.findUnique({ where: { id: originDockId } })
+      : null,
+    destinationDockId
+      ? prisma.shippingDock.findUnique({ where: { id: destinationDockId } })
+      : null,
+  ]);
+
+  if (originDockId && !originDock) {
+    throw new BadRequestError(ORDER_MESSAGES.ORIGIN_DOCK_NOT_FOUND);
+  }
+  if (destinationDockId && !destinationDock) {
+    throw new BadRequestError(ORDER_MESSAGES.DESTINATION_DOCK_NOT_FOUND);
+  }
+
+  for (const dock of [originDock, destinationDock]) {
+    if (!dock) continue;
+    if (dock.status === DockStatus.MAINTENANCE) {
+      throw new BadRequestError(ORDER_MESSAGES.DOCK_MAINTENANCE);
+    }
+    if (dock.status !== DockStatus.ACTIVE) {
+      throw new BadRequestError(
+        `Dock ${dock.code} is currently ${dock.status.toLowerCase()} and cannot accept orders.`,
+      );
+    }
+  }
 };
 
 export const OrderService = {
@@ -138,82 +193,88 @@ export const OrderService = {
   },
 
   async create(input: CreateOrderInput, userId: string, actorId: string) {
-    const trackingNumber = generateTrackingNumber();
-    const totalAmount =
-      Number(input.amount) +
-      Number(input.taxAmount) +
-      Number(input.shippingFee ?? 0);
-
-    if (input.originDockId || input.destinationDockId) {
-      const checks: Promise<any>[] = [];
-      if (input.originDockId)
-        checks.push(
-          prisma.shippingDock.findUnique({ where: { id: input.originDockId } }),
-        );
-      if (input.destinationDockId)
-        checks.push(
-          prisma.shippingDock.findUnique({
-            where: { id: input.destinationDockId },
-          }),
-        );
-
-      const docks = await Promise.all(checks);
-      if (input.originDockId && !docks[0])
-        throw new BadRequestError(ORDER_MESSAGES.ORIGIN_DOCK_NOT_FOUND);
-      if (
-        input.destinationDockId &&
-        (input.originDockId ? !docks[1] : !docks[0])
-      )
-        throw new BadRequestError(ORDER_MESSAGES.DESTINATION_DOCK_NOT_FOUND);
-
-      if (docks.some((d) => (d as any)?.status === "MAINTENANCE"))
-        throw new BadRequestError(ORDER_MESSAGES.DOCK_MAINTENANCE);
+    if (userId !== actorId) {
+      const targetUser = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { id: true, isActive: true },
+      });
+      if (!targetUser || !targetUser.isActive) {
+        throw new BadRequestError("Target user not found or inactive");
+      }
     }
 
-    return prisma.$transaction(async (tx) => {
-      const order = await (tx as any).order.create({
-        data: {
-          trackingNumber,
-          recipientName: input.recipientName,
-          recipientPhone: input.recipientPhone,
-          amount: input.amount as any,
-          taxAmount: input.taxAmount as any,
-          shippingFee: (input.shippingFee ?? 0) as any,
-          totalAmount: totalAmount as any,
-          originAddress: input.originAddress,
-          destinationAddress: input.destinationAddress,
-          status: "PENDING",
-          priority: input.priority || "STANDARD",
-          weightKg: input.weightKg as any,
-          dimensions: input.dimensions,
-          estimatedDelivery: input.estimatedDelivery
-            ? new Date(input.estimatedDelivery)
-            : null,
-          originDockId: input.originDockId,
-          destinationDockId: input.destinationDockId,
-          userId: userId, // Correctly using the passed userId
-        },
-      });
+    await validateDocks(input.originDockId, input.destinationDockId);
 
-      await (tx as any).orderHistory.create({
-        data: {
-          orderId: order.id,
-          status: "PENDING",
-          actorId,
-          notes: "Initial order placement.",
-        },
-      });
+    const totalAmount =
+      Math.round(
+        (Number(input.amount) +
+          Number(input.taxAmount) +
+          Number(input.shippingFee ?? 0)) *
+          100,
+      ) / 100;
 
-      AuditService.log({
-        userId: actorId,
-        action: "ORDER_CREATED",
-        entity: "order",
-        entityId: order.id,
-        metadata: { trackingNumber, totalAmount },
-      });
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const trackingNumber = generateTrackingNumber();
+      try {
+        return await prisma.$transaction(async (tx) => {
+          const order = await (tx as any).order.create({
+            data: {
+              trackingNumber,
+              recipientName: input.recipientName,
+              recipientPhone: input.recipientPhone,
+              amount: input.amount as any,
+              taxAmount: input.taxAmount as any,
+              shippingFee: (input.shippingFee ?? 0) as any,
+              totalAmount: totalAmount as any,
+              notes: input.notes,
+              originAddress: input.originAddress,
+              destinationAddress: input.destinationAddress,
+              status: OrderStatus.PENDING,
+              priority: input.priority || "STANDARD",
+              weightKg: input.weightKg as any,
+              volumetricWeight: input.volumetricWeight as any,
+              dimensions: input.dimensions,
+              estimatedDelivery: input.estimatedDelivery
+                ? new Date(input.estimatedDelivery)
+                : null,
+              originDockId: input.originDockId,
+              destinationDockId: input.destinationDockId,
+              userId,
+            },
+          });
 
-      return order;
-    });
+          await (tx as any).orderHistory.create({
+            data: {
+              orderId: order.id,
+              status: OrderStatus.PENDING,
+              actorId,
+              notes: "Initial order placement.",
+            },
+          });
+
+          AuditService.log({
+            userId: actorId,
+            action: "ORDER_CREATED",
+            entity: "order",
+            entityId: order.id,
+            metadata: { trackingNumber, totalAmount },
+          });
+
+          return order;
+        });
+      } catch (err) {
+        if (
+          err instanceof Prisma.PrismaClientKnownRequestError &&
+          err.code === "P2002" &&
+          attempt < 2
+        ) {
+          continue;
+        }
+        throw err;
+      }
+    }
+
+    throw new BadRequestError("Failed to generate unique tracking number");
   },
 
   async updateStatus(
@@ -225,10 +286,22 @@ export const OrderService = {
     const existing = await prisma.order.findUnique({ where: { id } });
     if (!existing) throw new NotFoundError("Order not found");
 
+    const allowedNext = VALID_ORDER_TRANSITIONS[existing.status] ?? [];
+    if (!allowedNext.includes(status)) {
+      throw new BadRequestError(
+        `${ORDER_MESSAGES.INVALID_STATUS}: cannot transition from ${existing.status} to ${status}`,
+      );
+    }
+
     return prisma.$transaction(async (tx) => {
       const updated = await tx.order.update({
         where: { id },
-        data: { status } as any,
+        data: {
+          status,
+          ...(status === OrderStatus.DELIVERED && {
+            actualDelivery: new Date(),
+          }),
+        } as any,
       });
 
       await (tx as any).orderHistory.create({
@@ -242,7 +315,7 @@ export const OrderService = {
 
       AuditService.log({
         userId: actorId,
-        action: "ORDER_UPDATED",
+        action: "ORDER_STATUS_CHANGED",
         entity: "order",
         entityId: id,
         metadata: { from: existing.status, to: status },
@@ -252,14 +325,66 @@ export const OrderService = {
     });
   },
 
+  async cancel(
+    id: string,
+    actor: { userId: string; role: UserRole },
+  ) {
+    const existing = await prisma.order.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundError(ORDER_MESSAGES.ORDER_NOT_FOUND);
+
+    const isPrivileged =
+      actor.role === UserRole.ADMIN || actor.role === UserRole.MANAGER;
+    if (!isPrivileged && existing.userId !== actor.userId) {
+      throw new ForbiddenError(
+        "You do not have permission to cancel this order",
+      );
+    }
+
+    if (existing.status !== OrderStatus.PENDING) {
+      throw new BadRequestError("Only pending orders can be cancelled.");
+    }
+
+    return this.updateStatus(
+      id,
+      OrderStatus.CANCELLED,
+      actor.userId,
+      "Order cancelled by user.",
+    );
+  },
+
   async update(id: string, input: UpdateOrderInput, actorId: string) {
     const existing = await prisma.order.findUnique({ where: { id } });
     if (!existing) throw new NotFoundError(`Order with id ${id} not found`);
+
+    if (
+      input.originDockId !== undefined ||
+      input.destinationDockId !== undefined
+    ) {
+      await validateDocks(
+        input.originDockId ?? existing.originDockId,
+        input.destinationDockId ?? existing.destinationDockId,
+      );
+    }
+
+    const amountChanged =
+      input.amount !== undefined ||
+      input.taxAmount !== undefined ||
+      input.shippingFee !== undefined;
+
+    const totalAmount = amountChanged
+      ? Math.round(
+          (Number(input.amount ?? existing.amount) +
+            Number(input.taxAmount ?? existing.taxAmount) +
+            Number(input.shippingFee ?? existing.shippingFee)) *
+            100,
+        ) / 100
+      : undefined;
 
     const updated = await prisma.order.update({
       where: { id },
       data: {
         ...input,
+        ...(totalAmount !== undefined && { totalAmount }),
         estimatedDelivery: input.estimatedDelivery
           ? new Date(input.estimatedDelivery)
           : undefined,
