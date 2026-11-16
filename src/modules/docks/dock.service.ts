@@ -1,3 +1,4 @@
+import { UserRole } from "../../generated/prisma/client";
 import { prisma } from "../../db/prisma";
 import { NotFoundError } from "../../errors/NotFoundError";
 import { BadRequestError } from "../../errors/BadRequestError";
@@ -69,7 +70,12 @@ export const DockService = {
     if (existingCode) {
       throw new BadRequestError(DOCK_MESSAGES.CODE_ALREADY_IN_USE);
     }
-    if (input.managerId && !manager) {
+    if (
+      input.managerId &&
+      (!manager ||
+        !manager.isActive ||
+        (manager.role !== UserRole.ADMIN && manager.role !== UserRole.MANAGER))
+    ) {
       throw new BadRequestError(DOCK_MESSAGES.MANAGER_NOT_FOUND);
     }
 
@@ -111,7 +117,12 @@ export const DockService = {
     const [duplicate, manager] = await Promise.all(checks);
 
     if (duplicate) throw new BadRequestError(DOCK_MESSAGES.CODE_ALREADY_IN_USE);
-    if (input.managerId && !manager)
+    if (
+      input.managerId &&
+      (!manager ||
+        !manager.isActive ||
+        (manager.role !== UserRole.ADMIN && manager.role !== UserRole.MANAGER))
+    )
       throw new BadRequestError(DOCK_MESSAGES.MANAGER_NOT_FOUND);
 
     const updated = await prisma.shippingDock.update({
@@ -139,7 +150,15 @@ export const DockService = {
   async delete(id: string, actorId?: string) {
     const existing = await prisma.shippingDock.findUnique({
       where: { id },
-      include: { _count: { select: { transactions: true } } } as any,
+      include: {
+        _count: {
+          select: {
+            transactions: true,
+            originOrders: true,
+            destinationOrders: true,
+          },
+        },
+      } as any,
     });
 
     if (!existing)
@@ -147,9 +166,13 @@ export const DockService = {
 
     // Safety check: Cannot delete a dock with active associations
     const stats = existing as any;
-    if (stats._count?.transactions > 0) {
+    if (
+      stats._count?.transactions > 0 ||
+      stats._count?.originOrders > 0 ||
+      stats._count?.destinationOrders > 0
+    ) {
       throw new BadRequestError(
-        "Cannot delete a dock that has associated transactions. Deactivate it instead.",
+        "Cannot delete a dock that has associated orders or transactions. Deactivate it instead.",
       );
     }
 

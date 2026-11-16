@@ -37,9 +37,23 @@ export const idParamSchema = z.object({
   params: z.object({ id: z.string().uuid("id must be a valid UUID") }),
 });
 
+export const getTransactionsSchema = z.object({
+  query: z.object({
+    page: z.string().optional(),
+    limit: z.string().optional(),
+    userId: z.string().uuid().optional(),
+    orderId: z.string().uuid().optional(),
+    status: z.nativeEnum(TransactionStatus).optional(),
+    type: z.nativeEnum(TransactionType).optional(),
+  }),
+});
+
 export type CreateTransactionInput = z.infer<
   typeof createTransactionSchema
 >["body"];
 export type UpdateTransactionInput = z.infer<
   typeof updateTransactionSchema
 >["body"];
+export type GetTransactionsQuery = z.infer<
+  typeof getTransactionsSchema
+>["query"];

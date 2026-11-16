@@ -1,0 +1,105 @@
+openapi: 3.0.3
+info:
+  title: Shipping Logistics API
+  version: 1.0.0
+  description: REST API for shipping logistics, order tracking, docks, and transactions.
+servers:
+  - url: http://localhost:3000
+    description: Local development server
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+security:
+  - bearerAuth: []
+paths:
+  /health:
+    get:
+      summary: Health check
+      security: []
+      responses:
+        "200":
+          description: Service and database are healthy
+        "503":
+          description: Database unavailable
+  /api/v1/auth/register:
+    post:
+      summary: Register a new user
+      security: []
+      responses:
+        "201":
+          description: User registered
+  /api/v1/auth/login:
+    post:
+      summary: Log in with email and password
+      security: []
+      responses:
+        "200":
+          description: Login successful or MFA challenge returned
+  /api/v1/auth/refresh:
+    post:
+      summary: Rotate refresh token and issue new access token
+      security: []
+      responses:
+        "200":
+          description: New token pair issued
+  /api/v1/auth/me:
+    get:
+      summary: Get current authenticated user profile
+      responses:
+        "200":
+          description: User profile
+  /api/v1/orders:
+    get:
+      summary: List orders
+      responses:
+        "200":
+          description: Paginated orders
+    post:
+      summary: Create a new order
+      responses:
+        "201":
+          description: Order created
+  /api/v1/orders/{id}:
+    get:
+      summary: Get order by ID
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Order details
+  /api/v1/docks:
+    get:
+      summary: List shipping docks
+      responses:
+        "200":
+          description: Paginated shipping docks
+    post:
+      summary: Create a shipping dock (Admin/Manager)
+      responses:
+        "201":
+          description: Dock created
+  /api/v1/transactions:
+    get:
+      summary: List transactions
+      responses:
+        "200":
+          description: Paginated transactions
+    post:
+      summary: Create a transaction (Admin/Manager)
+      responses:
+        "201":
+          description: Transaction created
+  /api/v1/activity-logs/me:
+    get:
+      summary: List current user's activity logs
+      responses:
+        "200":
+          description: Paginated activity logs
