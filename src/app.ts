@@ -20,6 +20,7 @@ import { dockRoutes } from "./modules/docks";
 import { transactionRoutes } from "./modules/transactions";
 import { activityLogRoutes } from "./modules/activity-logs";
 import { uploadRoutes } from "./modules/shared/index";
+import { userRoutes } from "./modules/users";
 
 const app: Application = express();
 
@@ -70,6 +71,7 @@ app.use(`${API_PREFIX}/docks`, dockRoutes);
 app.use(`${API_PREFIX}/transactions`, transactionRoutes);
 app.use(`${API_PREFIX}/activity-logs`, activityLogRoutes);
 app.use(`${API_PREFIX}/uploads`, uploadRoutes);
+app.use(`${API_PREFIX}/users`, userRoutes);
 
 app.use(notFound);
 app.use(errorHandler);

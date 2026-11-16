@@ -19,6 +19,15 @@ class EmailService {
     }
   }
 
+  private escapeHtml(value: string): string {
+    return value
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
   private wrapHtml(content: string): string {
     return `
       <!DOCTYPE html>
@@ -119,6 +128,57 @@ class EmailService {
     await this.provider.send({
       to,
       subject: "Security Alert: Your Account is Temporarily Locked",
+      html,
+    });
+  }
+
+  async sendOrderConfirmation(
+    to: string,
+    name: string,
+    trackingNumber: string,
+    destination: string,
+  ): Promise<void> {
+    const html = this.wrapHtml(`
+      <p>Hello ${this.escapeHtml(name)},</p>
+      <p>Your shipment has been confirmed and is being processed.</p>
+      <p><strong>Tracking Number:</strong> ${this.escapeHtml(trackingNumber)}</p>
+      <p><strong>Destination:</strong> ${this.escapeHtml(destination)}</p>
+    `);
+
+    await this.provider.send({
+      to,
+      subject: `Order Confirmed — Tracking #${trackingNumber}`,
+      html,
+    });
+  }
+
+  async sendOrderStatusUpdate(
+    to: string,
+    name: string,
+    trackingNumber: string,
+    status: string,
+  ): Promise<void> {
+    const html = this.wrapHtml(`
+      <p>Hello ${this.escapeHtml(name)},</p>
+      <p>Your shipment <strong>${this.escapeHtml(trackingNumber)}</strong> is now <strong>${this.escapeHtml(status)}</strong>.</p>
+    `);
+
+    await this.provider.send({
+      to,
+      subject: `Shipment Update — #${trackingNumber} (${status})`,
+      html,
+    });
+  }
+
+  async sendAccountDeactivated(to: string, name: string): Promise<void> {
+    const html = this.wrapHtml(`
+      <p>Hello ${this.escapeHtml(name)},</p>
+      <p>Your account has been deactivated. If you believe this was a mistake, please contact support immediately.</p>
+    `);
+
+    await this.provider.send({
+      to,
+      subject: "Your Account Has Been Deactivated",
       html,
     });
   }
