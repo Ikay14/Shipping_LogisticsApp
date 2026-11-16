@@ -77,6 +77,10 @@ export const getOrdersSchema = z.object({
   }),
 });
 
+export const orderIdParamSchema = z.object({
+  params: z.object({ id: z.string().uuid("id must be a valid UUID") }),
+});
+
 export type CreateOrderInput = z.infer<typeof createOrderSchema>["body"];
 export type UpdateOrderInput = z.infer<typeof updateOrderSchema>["body"];
 export type GetOrdersQuery = z.infer<typeof getOrdersSchema>["query"];

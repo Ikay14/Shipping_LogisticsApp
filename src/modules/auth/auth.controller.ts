@@ -22,9 +22,7 @@ import type {
  * Utility to extract security metadata from an Express request.
  */
 const getSecurityContext = (req: Request): SecurityContext => ({
-  ipAddress:
-    (req.headers["x-forwarded-for"] as string)?.split(",")[0].trim() ||
-    req.socket.remoteAddress,
+  ipAddress: req.ip || req.socket.remoteAddress,
   device: DeviceUtils.parse(req.headers["user-agent"]),
 });
 
