@@ -43,3 +43,25 @@ export const signRefreshToken = (payload: TokenPayload): string => {
 export const verifyToken = (token: string): TokenPayload => {
   return jwt.verify(token, env.JWT_SECRET as Secret) as TokenPayload;
 };
+
+/**
+ * Verifies an Access Token and ensures its token type is 'access'.
+ */
+export const verifyAccessToken = (token: string): TokenPayload => {
+  const payload = verifyToken(token);
+  if (payload.type !== "access") {
+    throw new Error("Invalid access token type");
+  }
+  return payload;
+};
+
+/**
+ * Verifies a Refresh Token and ensures its token type is 'refresh'.
+ */
+export const verifyRefreshToken = (token: string): TokenPayload => {
+  const payload = verifyToken(token);
+  if (payload.type !== "refresh") {
+    throw new Error("Invalid refresh token type");
+  }
+  return payload;
+};

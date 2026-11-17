@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from "express";
-import { AnyZodObject, ZodError } from "zod";
+import { z, ZodError } from "zod";
 import { BadRequestError } from "../errors/BadRequestError";
 
 /**
@@ -10,14 +10,18 @@ import { BadRequestError } from "../errors/BadRequestError";
  * Usage: router.post('/', validateRequest(createOrderSchema), controller.create)
  */
 export const validateRequest =
-  (schema: AnyZodObject) =>
+  (schema: z.ZodObject<any>) =>
   async (req: Request, _res: Response, next: NextFunction): Promise<void> => {
     try {
-      const result = await schema.parseAsync({
+      const result = (await schema.parseAsync({
         body: req.body,
         query: req.query,
         params: req.params,
-      });
+      })) as {
+        body?: Request["body"];
+        query?: Request["query"];
+        params?: Request["params"];
+      };
 
       // Apply parsed + transformed values back to the request
       if (result.body !== undefined) req.body = result.body;
@@ -27,7 +31,7 @@ export const validateRequest =
       next();
     } catch (error) {
       if (error instanceof ZodError) {
-        const message = error.errors
+        const message = error.issues
           .map((e) => `${e.path.slice(1).join(".")}: ${e.message}`)
           .join("; ");
         next(new BadRequestError(message));

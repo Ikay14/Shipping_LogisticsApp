@@ -1,19 +1,32 @@
 import { Request, Response } from "express";
 import { StatusCodes } from "http-status-codes";
+import { UserRole } from "../../generated/prisma/client";
 import { TransactionService } from "./transaction.service";
 import type {
   CreateTransactionInput,
   UpdateTransactionInput,
+  GetTransactionsQuery,
 } from "./transaction.schema";
 
 export const TransactionController = {
   async getAll(req: Request, res: Response): Promise<void> {
-    const result = await TransactionService.getAll(req.query);
+    const actor = {
+      userId: req.user!.userId,
+      role: req.user!.role as UserRole,
+    };
+    const result = await TransactionService.getAll(
+      req.query as unknown as GetTransactionsQuery,
+      actor,
+    );
     res.status(StatusCodes.OK).json({ success: true, ...result });
   },
 
   async getById(req: Request, res: Response): Promise<void> {
-    const transaction = await TransactionService.getById(req.params.id);
+    const actor = {
+      userId: req.user!.userId,
+      role: req.user!.role as UserRole,
+    };
+    const transaction = await TransactionService.getById(req.params.id, actor);
     res.status(StatusCodes.OK).json({ success: true, data: transaction });
   },
 
