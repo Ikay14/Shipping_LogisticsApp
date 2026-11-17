@@ -45,7 +45,6 @@ const generateTrackingNumber = (): string => {
   return `${prefix}-${base.slice(0, 4)}-${base.slice(4, 8)}-${base.slice(8)}${checksum}`;
 };
 
-<<<<<<< HEAD
 const VALID_ORDER_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   [OrderStatus.PENDING]: [OrderStatus.PAID, OrderStatus.CANCELLED],
   [OrderStatus.PAID]: [OrderStatus.PROCESSING, OrderStatus.CANCELLED],
