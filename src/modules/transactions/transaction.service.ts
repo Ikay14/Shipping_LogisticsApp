@@ -46,7 +46,6 @@ const TRANSACTION_INCLUDE = {
 import {
   getPaginationOptions,
   formatPaginatedResult,
-  PaginationInput,
 } from "../../utils/pagination";
 
 export interface TransactionActor {

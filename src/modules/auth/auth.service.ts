@@ -368,9 +368,64 @@ export const AuthService = {
 
     AuditService.log({
       userId,
-      action: "PROFILE_UPDATED",
+      action: "2FA_ENABLED",
       entity: "auth",
       metadata: { detail: "2FA Activated" },
+    });
+  },
+
+  /**
+   * Disables 2FA after verifying current password and TOTP code, and revokes sessions.
+   */
+  async disable2FA(
+    userId: string,
+    currentPassword: string,
+    code: string,
+    context: SecurityContext,
+  ): Promise<void> {
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new BadRequestError(AUTH_MESSAGES.USER_NOT_FOUND);
+
+    if (!user.isTwoFactorEnabled || !user.twoFactorSecret) {
+      throw new BadRequestError(AUTH_MESSAGES.MFA_NOT_ENABLED);
+    }
+
+    const isPasswordValid = await PasswordUtils.compare(
+      currentPassword,
+      user.passwordHash,
+    );
+    if (!isPasswordValid) {
+      throw new BadRequestError(AUTH_MESSAGES.CURRENT_PASSWORD_INCORRECT);
+    }
+
+    const isCodeValid = verify({
+      token: code,
+      secret: user.twoFactorSecret,
+    });
+    if (!isCodeValid) {
+      throw new BadRequestError(AUTH_MESSAGES.MFA_INVALID);
+    }
+
+    await prisma.$transaction([
+      prisma.user.update({
+        where: { id: userId },
+        data: {
+          isTwoFactorEnabled: false,
+          twoFactorSecret: null,
+        },
+      }),
+      prisma.userToken.deleteMany({
+        where: { userId, type: "REFRESH_TOKEN" },
+      }),
+    ]);
+
+    AuditService.log({
+      userId,
+      action: "PROFILE_UPDATED",
+      entity: "auth",
+      ipAddress: context.ipAddress,
+      device: context.device,
+      metadata: { detail: "2FA Disabled" },
     });
   },
 
@@ -425,21 +480,49 @@ export const AuthService = {
   },
 
   /**
-   * Revokes a refresh token (Logout).
+   * Revokes a refresh token (Logout) if owned by the authenticated user.
    */
-  async logout(token: string, context: SecurityContext): Promise<void> {
+  async logout(
+    token: string,
+    userId: string,
+    context: SecurityContext,
+  ): Promise<void> {
     const userToken = await prisma.userToken.findUnique({ where: { token } });
-    if (!userToken || userToken.type !== "REFRESH_TOKEN") return;
+    if (
+      !userToken ||
+      userToken.type !== "REFRESH_TOKEN" ||
+      userToken.userId !== userId
+    ) {
+      return;
+    }
 
     await prisma.userToken.delete({ where: { id: userToken.id } });
 
     AuditService.log({
       userId: userToken.userId,
-      action: "LOGIN_FAILURE",
+      action: "LOGOUT",
       entity: "auth",
       ipAddress: context.ipAddress,
       device: context.device,
       metadata: { detail: "Manual logout" },
+    });
+  },
+
+  /**
+   * Revokes all refresh tokens for the authenticated user.
+   */
+  async logoutAll(userId: string, context: SecurityContext): Promise<void> {
+    await prisma.userToken.deleteMany({
+      where: { userId, type: "REFRESH_TOKEN" },
+    });
+
+    AuditService.log({
+      userId,
+      action: "LOGOUT",
+      entity: "auth",
+      ipAddress: context.ipAddress,
+      device: context.device,
+      metadata: { detail: "Logout from all devices" },
     });
   },
 
