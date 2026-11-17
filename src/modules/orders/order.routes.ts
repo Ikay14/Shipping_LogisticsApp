@@ -31,9 +31,10 @@ router.get(
 );
 
 /**
- * CUSTOMER / STAFF: Create order
+ * CUSTOMER / STAFF: Create order & cancel pending order
  */
 router.post("/", validateRequest(createOrderSchema), OrderController.create);
+router.post("/:id/cancel", OrderController.cancel);
 
 /**
  * Logistics Internal: Update parcel status

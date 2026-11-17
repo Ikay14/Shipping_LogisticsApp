@@ -37,12 +37,26 @@ export class OrderController {
 
   static async create(req: Request, res: Response) {
     const input = req.body as CreateOrderInput;
-    // req.user is populated by authenticate middleware
-    const actorId = (req as any).user.id;
-    const userId = req.body.userId || actorId;
+    const actorId = req.user!.userId;
+    const role = req.user!.role as UserRole;
+    const canAssignUser =
+      role === UserRole.ADMIN ||
+      role === UserRole.MANAGER ||
+      role === UserRole.STAFF;
+    const userId = canAssignUser && input.userId ? input.userId : actorId;
 
     const order = await OrderService.create(input, userId, actorId);
     return res.status(StatusCodes.CREATED).json({ success: true, data: order });
+  }
+
+  static async cancel(req: Request, res: Response) {
+    const { id } = req.params;
+    const actor = {
+      userId: req.user!.userId,
+      role: req.user!.role as UserRole,
+    };
+    const order = await OrderService.cancel(id, actor);
+    return res.status(StatusCodes.OK).json({ success: true, data: order });
   }
 
   static async updateStatus(req: Request, res: Response) {

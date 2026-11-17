@@ -1,4 +1,11 @@
-import { Prisma, UserRole } from "../../generated/prisma/client";
+import crypto from "crypto";
+import {
+  OrderStatus,
+  Prisma,
+  TransactionStatus,
+  TransactionType,
+  UserRole,
+} from "../../generated/prisma/client";
 import { prisma } from "../../db/prisma";
 import { NotFoundError } from "../../errors/NotFoundError";
 import { BadRequestError } from "../../errors/BadRequestError";
@@ -12,8 +19,21 @@ import type {
 
 const generateReference = (): string => {
   const timestamp = Date.now().toString(36).toUpperCase();
-  const random = Math.random().toString(36).substring(2, 7).toUpperCase();
+  const random = crypto.randomBytes(3).toString("hex").toUpperCase();
   return `TXN-${timestamp}-${random}`;
+};
+
+const VALID_TRANSACTION_TRANSITIONS: Record<
+  TransactionStatus,
+  TransactionStatus[]
+> = {
+  [TransactionStatus.PENDING]: [
+    TransactionStatus.COMPLETED,
+    TransactionStatus.FAILED,
+  ],
+  [TransactionStatus.COMPLETED]: [TransactionStatus.REVERSED],
+  [TransactionStatus.FAILED]: [],
+  [TransactionStatus.REVERSED]: [],
 };
 
 const TRANSACTION_INCLUDE = {
@@ -87,24 +107,60 @@ export const TransactionService = {
     const [user, order, dock] = await Promise.all([
       prisma.user.findUnique({
         where: { id: input.userId },
-        select: { id: true },
+        select: { id: true, isActive: true },
       }),
       prisma.order.findUnique({
         where: { id: input.orderId },
-        select: { id: true },
+        select: { id: true, userId: true, status: true, totalAmount: true },
       }),
       prisma.shippingDock.findUnique({
         where: { id: input.shippingDockId },
-        select: { id: true },
+        select: { id: true, status: true },
       }),
     ]);
 
-    if (!user) throw new BadRequestError(`User ${input.userId} not found`);
+    if (!user || !user.isActive)
+      throw new BadRequestError(`User ${input.userId} not found or inactive`);
     if (!order) throw new BadRequestError(`Order ${input.orderId} not found`);
     if (!dock)
       throw new BadRequestError(
         `Shipping dock ${input.shippingDockId} not found`,
       );
+    if (order.userId !== input.userId) {
+      throw new BadRequestError("Order does not belong to the specified user");
+    }
+    if (order.status === OrderStatus.CANCELLED) {
+      throw new BadRequestError(
+        "Cannot create a transaction for a cancelled order",
+      );
+    }
+
+    if (input.type === TransactionType.PAYMENT) {
+      if (order.status !== OrderStatus.PENDING) {
+        throw new BadRequestError(
+          `Order is already ${order.status} and cannot accept a new payment`,
+        );
+      }
+
+      const existingCompletedPayment = await prisma.transaction.findFirst({
+        where: {
+          orderId: order.id,
+          type: TransactionType.PAYMENT,
+          status: TransactionStatus.COMPLETED,
+        },
+      });
+      if (existingCompletedPayment) {
+        throw new BadRequestError("Order already has a completed payment");
+      }
+
+      const expectedCents = Math.round(Number(order.totalAmount) * 100);
+      const inputCents = Math.round(Number(input.amount) * 100);
+      if (inputCents !== expectedCents) {
+        throw new BadRequestError(
+          `Payment amount (${input.amount}) must match order total (${order.totalAmount})`,
+        );
+      }
+    }
 
     const reference = generateReference();
     const transaction = await prisma.transaction.create({
@@ -132,17 +188,50 @@ export const TransactionService = {
   },
 
   async update(id: string, input: UpdateTransactionInput, actorId: string) {
-    const existing = await prisma.transaction.findUnique({ where: { id } });
+    const existing = await prisma.transaction.findUnique({
+      where: { id },
+      include: { order: { select: { id: true, status: true } } },
+    });
     if (!existing)
       throw new NotFoundError(`Transaction with id ${id} not found`);
 
-    const updated = await prisma.transaction.update({
-      where: { id },
-      data: {
-        ...input,
-        metadata: input.metadata as Prisma.InputJsonValue | undefined,
-      },
-      include: TRANSACTION_INCLUDE,
+    const allowedNext = VALID_TRANSACTION_TRANSITIONS[existing.status] ?? [];
+    if (input.status !== existing.status && !allowedNext.includes(input.status)) {
+      throw new BadRequestError(
+        `Invalid transaction status transition from ${existing.status} to ${input.status}`,
+      );
+    }
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const txn = await tx.transaction.update({
+        where: { id },
+        data: {
+          ...input,
+          metadata: input.metadata as Prisma.InputJsonValue | undefined,
+        },
+        include: TRANSACTION_INCLUDE,
+      });
+
+      if (
+        existing.type === TransactionType.PAYMENT &&
+        input.status === TransactionStatus.COMPLETED &&
+        existing.order.status === OrderStatus.PENDING
+      ) {
+        await tx.order.update({
+          where: { id: existing.orderId },
+          data: { status: OrderStatus.PAID },
+        });
+        await tx.orderHistory.create({
+          data: {
+            orderId: existing.orderId,
+            status: OrderStatus.PAID,
+            actorId,
+            notes: `Payment completed (${existing.reference}).`,
+          },
+        });
+      }
+
+      return txn;
     });
 
     await AuditService.log({
