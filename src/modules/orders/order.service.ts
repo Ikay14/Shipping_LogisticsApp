@@ -2,9 +2,7 @@ import { prisma } from "../../db/prisma";
 import { NotFoundError } from "../../errors/NotFoundError";
 import { BadRequestError } from "../../errors/BadRequestError";
 import { AuditService } from "../shared/service/AuditService";
-import { emailService } from "../shared/service/email/index";
-import { logger } from "../../utils/logger";
-import { OrderStatus } from "../../generated/prisma/client";
+import { OrderStatus, Prisma } from "../../generated/prisma/client";
 import { ORDER_MESSAGES } from "../../constants/messages";
 import {
   getPaginationOptions,
@@ -47,7 +45,7 @@ export const OrderService = {
       10,
     );
 
-    const where = {
+    const where: Prisma.OrderWhereInput = {
       ...(query.status && { status: query.status }),
       ...(query.priority && { priority: query.priority }),
       ...(query.userId && { userId: query.userId }),
@@ -68,7 +66,7 @@ export const OrderService = {
           { recipientPhone: { contains: query.search } },
         ],
       }),
-    } as any;
+    };
 
     const [orders, total] = await Promise.all([
       prisma.order.findMany({
@@ -78,11 +76,8 @@ export const OrderService = {
         orderBy: { createdAt: "desc" },
         include: {
           user: { select: { id: true, name: true, email: true } },
-          // Using any to bridge stale Prisma types
-          ...({
-            originDock: { select: { name: true } },
-            destinationDock: { select: { name: true } },
-          } as any),
+          originDock: { select: { name: true } },
+          destinationDock: { select: { name: true } },
         },
       }),
       prisma.order.count({ where }),
@@ -99,7 +94,7 @@ export const OrderService = {
         history: {
           orderBy: { createdAt: "desc" },
           include: { actor: { select: { name: true, role: true } } },
-        } as any,
+        },
         transactions: {
           take: 20,
           orderBy: { createdAt: "desc" },
@@ -107,11 +102,8 @@ export const OrderService = {
             shippingDock: { select: { id: true, name: true, code: true } },
           },
         },
-        // Bridge for recently added relations
-        ...({
-          originDock: { select: { name: true, code: true } },
-          destinationDock: { select: { name: true, code: true } },
-        } as any),
+        originDock: { select: { name: true, code: true } },
+        destinationDock: { select: { name: true, code: true } },
       },
     });
 
@@ -127,11 +119,9 @@ export const OrderService = {
         history: {
           orderBy: { createdAt: "desc" },
           include: { actor: { select: { name: true, role: true } } },
-        } as any,
-        ...({
-          originDock: { select: { name: true, code: true } },
-          destinationDock: { select: { name: true, code: true } },
-        } as any),
+        },
+        originDock: { select: { name: true, code: true } },
+        destinationDock: { select: { name: true, code: true } },
       },
     });
 
@@ -168,25 +158,25 @@ export const OrderService = {
       )
         throw new BadRequestError(ORDER_MESSAGES.DESTINATION_DOCK_NOT_FOUND);
 
-      if (docks.some((d) => (d as any)?.status === "MAINTENANCE"))
+      if (docks.some((d) => d?.status === "MAINTENANCE"))
         throw new BadRequestError(ORDER_MESSAGES.DOCK_MAINTENANCE);
     }
 
-    const createdOrder = await prisma.$transaction(async (tx) => {
-      const order = await (tx as any).order.create({
+    return prisma.$transaction(async (tx) => {
+      const order = await tx.order.create({
         data: {
           trackingNumber,
           recipientName: input.recipientName,
           recipientPhone: input.recipientPhone,
-          amount: input.amount as any,
-          taxAmount: input.taxAmount as any,
-          shippingFee: (input.shippingFee ?? 0) as any,
-          totalAmount: totalAmount as any,
+          amount: input.amount,
+          taxAmount: input.taxAmount,
+          shippingFee: input.shippingFee ?? 0,
+          totalAmount: totalAmount,
           originAddress: input.originAddress,
           destinationAddress: input.destinationAddress,
           status: "PENDING",
           priority: input.priority || "STANDARD",
-          weightKg: input.weightKg as any,
+          weightKg: input.weightKg,
           dimensions: input.dimensions,
           estimatedDelivery: input.estimatedDelivery
             ? new Date(input.estimatedDelivery)
@@ -195,10 +185,9 @@ export const OrderService = {
           destinationDockId: input.destinationDockId,
           userId: userId, // Correctly using the passed userId
         },
-        include: { user: { select: { email: true, name: true } } },
       });
 
-      await (tx as any).orderHistory.create({
+      await tx.orderHistory.create({
         data: {
           orderId: order.id,
           status: "PENDING",
@@ -217,19 +206,6 @@ export const OrderService = {
 
       return order;
     });
-
-    if (createdOrder.user?.email) {
-      emailService
-        .sendOrderConfirmation(
-          createdOrder.user.email,
-          createdOrder.user.name,
-          createdOrder.trackingNumber,
-          createdOrder.destinationAddress,
-        )
-        .catch((err) => logger.error("Order confirmation email failed:", err));
-    }
-
-    return createdOrder;
   },
 
   async updateStatus(
@@ -241,14 +217,13 @@ export const OrderService = {
     const existing = await prisma.order.findUnique({ where: { id } });
     if (!existing) throw new NotFoundError("Order not found");
 
-    const updatedOrder = await prisma.$transaction(async (tx) => {
+    return prisma.$transaction(async (tx) => {
       const updated = await tx.order.update({
         where: { id },
-        data: { status } as any,
-        include: { user: { select: { email: true, name: true } } },
+        data: { status },
       });
 
-      await (tx as any).orderHistory.create({
+      await tx.orderHistory.create({
         data: {
           orderId: id,
           status,
@@ -267,24 +242,6 @@ export const OrderService = {
 
       return updated;
     });
-
-    if (
-      updatedOrder.user?.email &&
-      (status === OrderStatus.SHIPPED ||
-        status === OrderStatus.DELIVERED ||
-        status === OrderStatus.CANCELLED)
-    ) {
-      emailService
-        .sendOrderStatusUpdate(
-          updatedOrder.user.email,
-          updatedOrder.user.name,
-          updatedOrder.trackingNumber,
-          status,
-        )
-        .catch((err) => logger.error("Order status email failed:", err));
-    }
-
-    return updatedOrder;
   },
 
   async update(id: string, input: UpdateOrderInput, actorId: string) {
@@ -301,7 +258,7 @@ export const OrderService = {
         actualDelivery: input.actualDelivery
           ? new Date(input.actualDelivery)
           : undefined,
-      } as any,
+      },
     });
 
     AuditService.log({

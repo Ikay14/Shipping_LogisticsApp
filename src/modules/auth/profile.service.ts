@@ -22,13 +22,11 @@ export const ProfileService = {
         isActive: true,
         isEmailVerified: true,
         profileImageUrl: true,
+        isTwoFactorEnabled: true,
+        lastLoginAt: true,
+        currentLoginIp: true,
         createdAt: true,
         updatedAt: true,
-        ...({
-          isTwoFactorEnabled: true,
-          lastLoginAt: true,
-          currentLoginIp: true,
-        } as any),
       },
     });
 
@@ -75,13 +73,11 @@ export const ProfileService = {
         isActive: true,
         isEmailVerified: true,
         profileImageUrl: true,
+        isTwoFactorEnabled: true,
+        lastLoginAt: true,
+        currentLoginIp: true,
         createdAt: true,
         updatedAt: true,
-        ...({
-          isTwoFactorEnabled: true,
-          lastLoginAt: true,
-          currentLoginIp: true,
-        } as any),
       },
     });
 

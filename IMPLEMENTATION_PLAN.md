@@ -1,48 +1,61 @@
-# Implementation Plan: `chore/tests-and-swagger-docs`
+# Implementation Plan: `fix/zod-v4-and-typescript-fixes`
 
 ## Goal
-Establish an automated unit & integration test suite and mount Swagger / OpenAPI documentation using the already-installed `swagger-ui-express` and `yamljs` packages.
+Resolve Zod v4 API mismatches, eliminate unsafe `as any` casts against Prisma types, and fix environment/database pool startup and shutdown edge cases so `npm run build` (`tsc`) passes cleanly with `strict: true`.
 
 ---
 
-## 1. Automated Testing Infrastructure
+## 1. Fix Zod v4 Validation Middleware & Schemas
 
 ### Problem
-`package.json` has no `test` script and there are zero unit or integration tests anywhere in the repository.
+`package.json` depends on `"zod": "^4.3.6"`, while parts of the codebase still use Zod v3 APIs:
+- `src/middlewares/validateRequest.ts` imports `AnyZodObject` and reads `error.errors` (in Zod v4, `ZodError` exposes `error.issues`, and `AnyZodObject` was removed/changed).
+- `src/modules/auth/auth.schema.ts` and `src/modules/orders/order.schema.ts` pass `{ required_error: "..." }` (Zod v3), whereas `src/modules/docks/dock.schema.ts` and `src/modules/transactions/transaction.schema.ts` use `{ error: "..." }` (Zod v4).
 
 ### Steps
-1. **Install test devDependencies**:
-   - Add `vitest` (or `jest` + `ts-jest` + `@types/jest`) and `supertest` + `@types/supertest`.
-   - Add `"test"`, `"test:watch"`, and `"test:coverage"` scripts to `package.json`.
-   - Ensure `tsconfig.json` excludes or cleanly handles test files (or add `tsconfig.test.json`).
-2. **Test Setup (`tests/setup.ts`)**:
-   - Provide mock/stubbed `env` defaults for `NODE_ENV=test` (`JWT_SECRET`, `DATABASE_URL`).
-   - Mock external side effects (`emailService`, Firebase `bucket`) for fast deterministic unit/API tests, plus optional integration tests against a dedicated test PostgreSQL database.
-3. **Priority Test Suites**:
-   - `tests/unit/password.test.ts`: `PasswordUtils.validate`, `isCommon`, `hash`/`compare`.
-   - `tests/unit/pagination.test.ts`: `getPaginationOptions` clamping (`page < 1`, `limit > maxLimit`) and `formatPaginatedResult`.
-   - `tests/unit/sanitize.test.ts`: XSS stripping on nested objects/arrays in `req.body`, `req.query`, `req.params`.
-   - `tests/integration/auth.test.ts`: Register, email verification, login, lockout after 5 failures, refresh token rotation & reuse rejection, 2FA setup/verify, logout.
-   - `tests/integration/rbac-idor.test.ts`: Verify `CUSTOMER` vs `STAFF` vs `MANAGER` vs `ADMIN` permissions across `/orders`, `/docks`, `/transactions`, and `/activity-logs`.
-   - `tests/integration/orders-transactions.test.ts`: Order lifecycle transitions, dock validation, transaction completion updating order status.
+1. **`src/middlewares/validateRequest.ts`**:
+   - Replace `AnyZodObject` with `z.ZodObject<any>` (or `z.ZodType` with `parseAsync`).
+   - Update `error.errors.map(...)` to `error.issues.map(...)`.
+   - Ensure `result` typing handles `body`, `query`, and `params` safely without `any` errors.
+2. **`src/modules/auth/auth.schema.ts` & `src/modules/orders/order.schema.ts`**:
+   - Standardize error options to Zod v4 syntax (`{ error: "..." }` instead of `{ required_error: "..." }`).
+   - Verify `z.nativeEnum(...)` vs `z.enum(...)` compatibility in Zod v4 across `order.schema.ts`, `dock.schema.ts`, and `transaction.schema.ts`.
 
 ---
 
-## 2. Mount Swagger / OpenAPI Documentation
+## 2. Remove Stale `as any` Casts
 
 ### Problem
-`swagger-ui-express`, `@types/swagger-ui-express`, `yamljs`, and `@types/yamljs` are already listed in `package.json`, and `ShippingLogistics.postman_collection.json` exists, but no OpenAPI spec or `/api-docs` route is mounted in `src/app.ts`.
+Multiple services wrap Prisma queries and fields in `as any` casts left over from an older generated Prisma client, hiding real type errors.
 
 ### Steps
-1. **Create `docs/openapi.yaml` (or `src/docs/openapi.yaml`)**:
-   - Document `/health` and all `/api/v1/*` modules (`auth`, `orders`, `docks`, `transactions`, `activity-logs`, `uploads`) with request/response schemas, `bearerAuth` JWT security scheme, and error responses (`400`, `401`, `403`, `404`, `429`).
-2. **Mount in `src/app.ts`**:
-   - Load spec with `yamljs.load(...)` and serve via `swaggerUi.serve` / `swaggerUi.setup(swaggerSpec)` at `/api-docs` (optionally gated or disabled in `production` if desired).
-   - Ensure `helmet` CSP headers allow Swagger UI assets on `/api-docs` (or configure CSP exception for `/api-docs`).
+1. Run `npm run db:generate` (`prisma generate`) to ensure `src/generated/prisma` is current.
+2. Audit and remove `as any` workarounds in:
+   - `src/modules/auth/auth.service.ts` (`prisma.user as any`, `(user as any).isTwoFactorEnabled`, `(user as any).twoFactorSecret`, `data as any`)
+   - `src/modules/auth/profile.service.ts` (`...({ isTwoFactorEnabled: true, ... } as any)`)
+   - `src/modules/orders/order.service.ts` (`where as any`, `originDock`/`destinationDock` `as any`, `tx as any`, `history` `as any`, `data as any`)
+   - `src/modules/docks/dock.service.ts` (`_count as any`, `data: input as any`)
+   - `src/modules/shared/service/AuditService.ts` (`prisma as any`)
+   - `src/middlewares/activityLogger.ts` (`prisma as any`, `metadata as any`)
+3. Also check `src/utils/jwt.ts` (`expiresIn` cast) and `src/utils/device.ts` (`@ts-ignore` on `new UAParser(userAgent)`).
+
+---
+
+## 3. Environment & Database Pool Hardening
+
+### Steps
+1. **`src/config/env.ts`**:
+   - Line 72: `SMTP_PORT: z.string().transform(Number).optional()` turns an empty string `SMTP_PORT=""` into `0`. Preprocess empty strings to `undefined` and validate a valid port integer (`1`–`65535`).
+   - Validate `PORT` as a positive port integer as well.
+   - Replace `( _env.data as any )[secret]` with typed indexing.
+2. **`src/db/prisma.ts` & `src/server.ts`**:
+   - Pass `ssl` configuration to `new Pool({ connectionString: env.DATABASE_URL, ssl: env.DB_SSL ? { rejectUnauthorized: false } : undefined })` (or configurable CA) so `DB_SSL=true` actually takes effect.
+   - Export `pool` from `src/db/prisma.ts` and call `await pool.end()` alongside `await prisma.$disconnect()` inside `shutdown()` in `src/server.ts`.
 
 ---
 
 ## Verification Checklist
-- [ ] `npm test` runs all unit & integration tests and passes cleanly.
-- [ ] `GET /api-docs` renders interactive Swagger UI with accurate schemas and Bearer auth support.
-- [ ] `npm run build` (`tsc`) continues to pass with `tests/` excluded from `dist/` or compiling cleanly.
+- [ ] Run `npm install` and `npm run db:generate`.
+- [ ] Run `npm run build` (`tsc`) and confirm zero errors or warnings (`noUnusedLocals`, `noUnusedParameters`, `strict: true`).
+- [ ] Boot server with `.env` having empty `SMTP_PORT=` and verify `env.SMTP_PORT` is `undefined` rather than `0`.
+- [ ] Trigger `SIGINT`/`SIGTERM` and verify both Prisma and `pg` Pool close cleanly.
