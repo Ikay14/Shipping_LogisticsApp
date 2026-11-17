@@ -126,12 +126,13 @@ export const ProfileService = {
   },
 
   /**
-   * Update profile image/avatar.
-   * Mock implementation for senior-level file handling structure.
+   * Update profile image/avatar and delete the previous asset from Firebase Storage.
    */
   async updateAvatar(userId: string, file: Express.Multer.File) {
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new NotFoundError("User not found");
+
+    const previousAvatarUrl = user.profileImageUrl;
 
     // Upload to Firebase and automatically convert to WebP for optimal delivery
     const result = await StorageService.uploadFile(
@@ -145,6 +146,10 @@ export const ProfileService = {
       where: { id: userId },
       data: { profileImageUrl: publicUrl },
     });
+
+    if (previousAvatarUrl) {
+      await StorageService.deleteFile(previousAvatarUrl);
+    }
 
     AuditService.log({
       userId,

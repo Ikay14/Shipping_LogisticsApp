@@ -2,6 +2,8 @@ import { prisma } from "../../db/prisma";
 import { NotFoundError } from "../../errors/NotFoundError";
 import { BadRequestError } from "../../errors/BadRequestError";
 import { AuditService } from "../shared/service/AuditService";
+import { emailService } from "../shared/service/email/index";
+import { logger } from "../../utils/logger";
 import { OrderStatus } from "../../generated/prisma/client";
 import { ORDER_MESSAGES } from "../../constants/messages";
 import {
@@ -170,7 +172,7 @@ export const OrderService = {
         throw new BadRequestError(ORDER_MESSAGES.DOCK_MAINTENANCE);
     }
 
-    return prisma.$transaction(async (tx) => {
+    const createdOrder = await prisma.$transaction(async (tx) => {
       const order = await (tx as any).order.create({
         data: {
           trackingNumber,
@@ -193,6 +195,7 @@ export const OrderService = {
           destinationDockId: input.destinationDockId,
           userId: userId, // Correctly using the passed userId
         },
+        include: { user: { select: { email: true, name: true } } },
       });
 
       await (tx as any).orderHistory.create({
@@ -214,6 +217,19 @@ export const OrderService = {
 
       return order;
     });
+
+    if (createdOrder.user?.email) {
+      emailService
+        .sendOrderConfirmation(
+          createdOrder.user.email,
+          createdOrder.user.name,
+          createdOrder.trackingNumber,
+          createdOrder.destinationAddress,
+        )
+        .catch((err) => logger.error("Order confirmation email failed:", err));
+    }
+
+    return createdOrder;
   },
 
   async updateStatus(
@@ -225,10 +241,11 @@ export const OrderService = {
     const existing = await prisma.order.findUnique({ where: { id } });
     if (!existing) throw new NotFoundError("Order not found");
 
-    return prisma.$transaction(async (tx) => {
+    const updatedOrder = await prisma.$transaction(async (tx) => {
       const updated = await tx.order.update({
         where: { id },
         data: { status } as any,
+        include: { user: { select: { email: true, name: true } } },
       });
 
       await (tx as any).orderHistory.create({
@@ -250,6 +267,24 @@ export const OrderService = {
 
       return updated;
     });
+
+    if (
+      updatedOrder.user?.email &&
+      (status === OrderStatus.SHIPPED ||
+        status === OrderStatus.DELIVERED ||
+        status === OrderStatus.CANCELLED)
+    ) {
+      emailService
+        .sendOrderStatusUpdate(
+          updatedOrder.user.email,
+          updatedOrder.user.name,
+          updatedOrder.trackingNumber,
+          status,
+        )
+        .catch((err) => logger.error("Order status email failed:", err));
+    }
+
+    return updatedOrder;
   },
 
   async update(id: string, input: UpdateOrderInput, actorId: string) {
