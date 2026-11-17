@@ -27,7 +27,7 @@ export const createTransactionSchema = z.object({
 export const updateTransactionSchema = z.object({
   params: z.object({ id: z.string().uuid("id must be a valid UUID") }),
   body: z.object({
-    status: z.enum(["PENDING", "COMPLETED", "FAILED", "REVERSED"]),
+    status: z.nativeEnum(TransactionStatus),
     notes: z.string().max(500).optional(),
     metadata: z.record(z.string(), z.unknown()).optional(),
   }),
