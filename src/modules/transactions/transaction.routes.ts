@@ -7,6 +7,7 @@ import { UserRole } from "../../generated/prisma/client";
 import {
   createTransactionSchema,
   updateTransactionSchema,
+  getTransactionsSchema,
   idParamSchema,
 } from "./transaction.schema";
 
@@ -16,9 +17,13 @@ const router = Router();
 router.use(authenticate);
 
 /**
- * Public/Staff: View transactions
+ * Staff/Admin: View all transactions; Customer: View own transactions
  */
-router.get("/", TransactionController.getAll);
+router.get(
+  "/",
+  validateRequest(getTransactionsSchema),
+  TransactionController.getAll,
+);
 router.get(
   "/:id",
   validateRequest(idParamSchema),

@@ -27,6 +27,10 @@ import { userRoutes } from "./modules/users";
 
 const app: Application = express();
 
+if (env.TRUST_PROXY) {
+  app.set("trust proxy", 1);
+}
+
 app.use(helmet()); // Set security HTTP headers
 app.use(cors()); // Enable CORS
 app.use(

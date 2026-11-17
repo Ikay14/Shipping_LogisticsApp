@@ -1,12 +1,7 @@
-import { TOTP, generateSecret, generateURI, verify } from "otplib";
+import { generateSecret, generateURI, verify } from "otplib";
 import QRCode from "qrcode";
-import { Prisma } from "../../generated/prisma/client";
 import { prisma } from "../../db/prisma";
-import {
-  signToken,
-  signRefreshToken,
-  verifyRefreshToken,
-} from "../../utils/jwt";
+import { signToken, signRefreshToken, verifyToken } from "../../utils/jwt";
 import { BadRequestError } from "../../errors/BadRequestError";
 import { UnauthenticatedError } from "../../errors/UnauthenticatedError";
 import { ForbiddenError } from "../../errors/ForbiddenError";
@@ -83,14 +78,10 @@ export const AuthService = {
     data: RegisterInput,
     context: SecurityContext,
   ): Promise<AuthResponse> {
-    const normalizedEmail = data.email.toLowerCase().trim();
-    const orConditions: Prisma.UserWhereInput[] = [{ email: normalizedEmail }];
-    if (data.phone) {
-      orConditions.push({ phone: data.phone.trim() });
-    }
-
     const existingUser = await prisma.user.findFirst({
-      where: { OR: orConditions },
+      where: {
+        OR: [{ email: data.email }, { phone: data.phone ?? undefined }],
+      },
     });
 
     if (existingUser) {
@@ -101,7 +92,7 @@ export const AuthService = {
         device: context.device,
         metadata: {
           reason: "Duplicate registration attempt",
-          email: normalizedEmail,
+          email: data.email,
         },
       });
       throw new BadRequestError(AUTH_MESSAGES.IDENTIFIER_ALREADY_EXISTS);
@@ -109,12 +100,14 @@ export const AuthService = {
 
     const hashedPassword = await PasswordUtils.hash(data.password);
 
-    const user = await (prisma.user as any).create({
+    const user = await prisma.user.create({
       data: {
         name: data.name,
-        email: normalizedEmail,
-        phone: data.phone?.trim(),
+        email: data.email,
+        phone: data.phone,
         passwordHash: hashedPassword,
+        currentLoginIp: context.ipAddress,
+        lastLoginAt: new Date(),
       },
       select: SAFE_USER_SELECT,
     });
@@ -124,7 +117,7 @@ export const AuthService = {
     await Promise.all([
       AuditService.log({
         userId: user.id,
-        action: "USER_REGISTERED",
+        action: "PROFILE_UPDATED",
         entity: "user",
         ipAddress: context.ipAddress,
         device: context.device,
@@ -146,8 +139,12 @@ export const AuthService = {
       .sendEmailVerification(user.email, user.name, verifyToken)
       .catch(console.error);
 
+    const session = await this._issueSession(user.id, user.name, user.role);
+
     return {
       user: user as unknown as UserEntity,
+      accessToken: session.accessToken,
+      refreshToken: session.refreshToken,
     };
   },
 
@@ -159,9 +156,8 @@ export const AuthService = {
     data: LoginInput,
     context: SecurityContext,
   ): Promise<AuthResponse> {
-    const normalizedEmail = data.email.toLowerCase().trim();
     const user = await prisma.user.findUnique({
-      where: { email: normalizedEmail },
+      where: { email: data.email },
     });
 
     // Protection against timing attacks and account brute-forcing
@@ -207,7 +203,7 @@ export const AuthService = {
       throw new ForbiddenError(AUTH_MESSAGES.EMAIL_NOT_VERIFIED);
     }
 
-    if ((user as any).isTwoFactorEnabled) {
+    if (user.isTwoFactorEnabled) {
       const mfaToken = PasswordUtils.generateRandomToken();
 
       await prisma.userToken.create({
@@ -232,7 +228,7 @@ export const AuthService = {
         data: {
           lastLoginAt: new Date(),
           currentLoginIp: context.ipAddress,
-        } as any,
+        },
       }),
       AuditService.recordLoginAttempt({
         userId: user.id,
@@ -273,26 +269,13 @@ export const AuthService = {
 
     const { user } = userToken;
 
-    if (!user.isActive) {
-      throw new UnauthenticatedError(AUTH_MESSAGES.ACCOUNT_INACTIVE);
-    }
-
-    if (!user.isEmailVerified) {
-      throw new ForbiddenError(AUTH_MESSAGES.EMAIL_NOT_VERIFIED);
-    }
-
-    if (await AuditService.isAccountLocked(user.id)) {
-      await prisma.userToken.delete({ where: { id: userToken.id } });
-      throw new ForbiddenError(AUTH_MESSAGES.ACCOUNT_LOCKED);
-    }
-
-    if (!(user as any).twoFactorSecret) {
+    if (!user.twoFactorSecret) {
       throw new BadRequestError(AUTH_MESSAGES.MFA_NOT_CONFIGURED);
     }
 
     const isValid = verify({
       token: code,
-      secret: (user as any).twoFactorSecret,
+      secret: user.twoFactorSecret,
     });
 
     if (!isValid) {
@@ -303,9 +286,6 @@ export const AuthService = {
         device: context.device,
         errorMessage: AUTH_MESSAGES.MFA_INVALID,
       });
-      if (await AuditService.isAccountLocked(user.id)) {
-        await prisma.userToken.delete({ where: { id: userToken.id } });
-      }
       throw new UnauthenticatedError(AUTH_MESSAGES.MFA_INVALID);
     }
 
@@ -317,7 +297,7 @@ export const AuthService = {
         data: {
           lastLoginAt: new Date(),
           currentLoginIp: context.ipAddress,
-        } as any,
+        },
       }),
       AuditService.recordLoginAttempt({
         userId: user.id,
@@ -341,11 +321,6 @@ export const AuthService = {
   async setup2FA(userId: string): Promise<{ secret: string; qrCode: string }> {
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new BadRequestError(AUTH_MESSAGES.USER_NOT_FOUND);
-    if ((user as any).isTwoFactorEnabled) {
-      throw new BadRequestError(
-        "2FA is already enabled. Disable it first before reconfiguring.",
-      );
-    }
 
     const secret = generateSecret();
     const otpauth = generateURI({
@@ -356,7 +331,7 @@ export const AuthService = {
     const qrCode = await QRCode.toDataURL(otpauth);
 
     // Save secret temporarily (we don't enable it yet)
-    await (prisma.user as any).update({
+    await prisma.user.update({
       where: { id: userId },
       data: {
         twoFactorSecret: secret,
@@ -373,84 +348,29 @@ export const AuthService = {
   async activate2FA(userId: string, code: string): Promise<void> {
     const user = await prisma.user.findUnique({ where: { id: userId } });
 
-    if (!user || !(user as any).twoFactorSecret) {
+    if (!user || !user.twoFactorSecret) {
       throw new BadRequestError(AUTH_MESSAGES.MFA_SETUP_NOT_INITIATED);
     }
 
     const isValid = verify({
       token: code,
-      secret: (user as any).twoFactorSecret,
+      secret: user.twoFactorSecret,
     });
 
     if (!isValid) {
       throw new BadRequestError(AUTH_MESSAGES.MFA_INVALID);
     }
 
-    await (prisma.user as any).update({
+    await prisma.user.update({
       where: { id: userId },
       data: { isTwoFactorEnabled: true },
     });
 
     AuditService.log({
       userId,
-      action: "2FA_ENABLED",
-      entity: "auth",
-      metadata: { detail: "2FA Activated" },
-    });
-  },
-
-  /**
-   * Disables 2FA after verifying current password and TOTP code, and revokes sessions.
-   */
-  async disable2FA(
-    userId: string,
-    currentPassword: string,
-    code: string,
-    context: SecurityContext,
-  ): Promise<void> {
-    const user = await prisma.user.findUnique({ where: { id: userId } });
-    if (!user) throw new BadRequestError(AUTH_MESSAGES.USER_NOT_FOUND);
-
-    if (!(user as any).isTwoFactorEnabled || !(user as any).twoFactorSecret) {
-      throw new BadRequestError(AUTH_MESSAGES.MFA_NOT_ENABLED);
-    }
-
-    const isPasswordValid = await PasswordUtils.compare(
-      currentPassword,
-      user.passwordHash,
-    );
-    if (!isPasswordValid) {
-      throw new BadRequestError(AUTH_MESSAGES.CURRENT_PASSWORD_INCORRECT);
-    }
-
-    const isCodeValid = verify({
-      token: code,
-      secret: (user as any).twoFactorSecret,
-    });
-    if (!isCodeValid) {
-      throw new BadRequestError(AUTH_MESSAGES.MFA_INVALID);
-    }
-
-    await prisma.$transaction([
-      prisma.user.update({
-        where: { id: userId },
-        data: {
-          isTwoFactorEnabled: false,
-          twoFactorSecret: null,
-        },
-      }),
-      prisma.userToken.deleteMany({
-        where: { userId, type: "REFRESH_TOKEN" },
-      }),
-    ]);
-
-    AuditService.log({
-      userId,
       action: "PROFILE_UPDATED",
       entity: "auth",
-      ipAddress: context.ipAddress,
-      device: context.device,
-      metadata: { detail: "2FA Disabled" },
+      metadata: { detail: "2FA Activated" },
     });
   },
 
@@ -463,7 +383,9 @@ export const AuthService = {
     context: SecurityContext,
   ): Promise<{ accessToken: string; refreshToken: string }> {
     try {
-      verifyRefreshToken(token);
+      const payload = verifyToken(token);
+      if (payload.type !== "refresh")
+        throw new UnauthenticatedError("Invalid token type");
 
       const userToken = await prisma.userToken.findUnique({
         where: { token },
@@ -478,36 +400,14 @@ export const AuthService = {
         throw new UnauthenticatedError(AUTH_MESSAGES.REFRESH_TOKEN_INVALID);
       }
 
-      if (!userToken.user.isActive || !userToken.user.isEmailVerified) {
-        await prisma.userToken.delete({ where: { id: userToken.id } });
-        throw new UnauthenticatedError(AUTH_MESSAGES.ACCOUNT_INACTIVE);
-      }
+      // Rotate: Revoke old and issue new
+      await prisma.userToken.delete({ where: { id: userToken.id } });
 
-      const newAccessToken = signToken({
-        id: userToken.user.id,
-        userId: userToken.user.id,
-        name: userToken.user.name,
-        role: userToken.user.role,
-      });
-      const newRefreshToken = signRefreshToken({
-        id: userToken.user.id,
-        userId: userToken.user.id,
-        name: userToken.user.name,
-        role: userToken.user.role,
-      });
-
-      // Atomic rotation: revoke old and persist new
-      await prisma.$transaction([
-        prisma.userToken.delete({ where: { id: userToken.id } }),
-        prisma.userToken.create({
-          data: {
-            token: newRefreshToken,
-            userId: userToken.user.id,
-            type: "REFRESH_TOKEN",
-            expiresAt: TokenExpiration.refreshToken(),
-          },
-        }),
-      ]);
+      const session = await this._issueSession(
+        userToken.user.id,
+        userToken.user.name,
+        userToken.user.role,
+      );
 
       AuditService.log({
         userId: userToken.userId,
@@ -518,56 +418,28 @@ export const AuthService = {
         metadata: { detail: "Token refreshed" },
       });
 
-      return { accessToken: newAccessToken, refreshToken: newRefreshToken };
+      return session;
     } catch (error) {
       throw new UnauthenticatedError(AUTH_MESSAGES.SESSION_INVALID);
     }
   },
 
   /**
-   * Revokes a refresh token (Logout) if owned by the authenticated user.
+   * Revokes a refresh token (Logout).
    */
-  async logout(
-    token: string,
-    userId: string,
-    context: SecurityContext,
-  ): Promise<void> {
+  async logout(token: string, context: SecurityContext): Promise<void> {
     const userToken = await prisma.userToken.findUnique({ where: { token } });
-    if (
-      !userToken ||
-      userToken.type !== "REFRESH_TOKEN" ||
-      userToken.userId !== userId
-    ) {
-      return;
-    }
+    if (!userToken || userToken.type !== "REFRESH_TOKEN") return;
 
     await prisma.userToken.delete({ where: { id: userToken.id } });
 
     AuditService.log({
       userId: userToken.userId,
-      action: "LOGOUT",
+      action: "LOGIN_FAILURE",
       entity: "auth",
       ipAddress: context.ipAddress,
       device: context.device,
       metadata: { detail: "Manual logout" },
-    });
-  },
-
-  /**
-   * Revokes all refresh tokens for the authenticated user.
-   */
-  async logoutAll(userId: string, context: SecurityContext): Promise<void> {
-    await prisma.userToken.deleteMany({
-      where: { userId, type: "REFRESH_TOKEN" },
-    });
-
-    AuditService.log({
-      userId,
-      action: "LOGOUT",
-      entity: "auth",
-      ipAddress: context.ipAddress,
-      device: context.device,
-      metadata: { detail: "Logout from all devices" },
     });
   },
 

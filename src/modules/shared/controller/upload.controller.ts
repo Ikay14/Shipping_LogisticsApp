@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { StatusCodes } from "http-status-codes";
 import { StorageService } from "../../../utils/upload";
 import { BadRequestError } from "../../../errors/BadRequestError";
+import { AuditService } from "../service/AuditService";
 
 export const UploadController = {
   /**
@@ -19,6 +20,14 @@ export const UploadController = {
       "uploads",
       convertToWebP,
     );
+
+    AuditService.log({
+      userId: req.user?.userId,
+      action: "MEDIA_UPLOADED",
+      entity: "user",
+      entityId: req.user?.userId,
+      metadata: { count: 1, size: result.size },
+    });
 
     res.status(StatusCodes.OK).json({
       success: true,
@@ -45,6 +54,14 @@ export const UploadController = {
         StorageService.uploadFile(file, "uploads/batch", convertToWebP),
       ),
     );
+
+    AuditService.log({
+      userId: req.user?.userId,
+      action: "MEDIA_UPLOADED",
+      entity: "user",
+      entityId: req.user?.userId,
+      metadata: { count: results.length },
+    });
 
     res.status(StatusCodes.OK).json({
       success: true,

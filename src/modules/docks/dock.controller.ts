@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { StatusCodes } from "http-status-codes";
+import { UserRole } from "../../generated/prisma/client";
 import { DockService } from "./dock.service";
 import type { CreateDockInput, UpdateDockInput } from "./dock.schema";
 
@@ -10,7 +11,10 @@ export const DockController = {
   },
 
   async getById(req: Request, res: Response): Promise<void> {
-    const dock = await DockService.getById(req.params.id);
+    const dock = await DockService.getById(
+      req.params.id,
+      req.user?.role as UserRole | undefined,
+    );
     res.status(StatusCodes.OK).json({ success: true, data: dock });
   },
 
