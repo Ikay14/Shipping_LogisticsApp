@@ -13,16 +13,24 @@ import { prisma } from "../db/prisma";
  * Logs: method + path, entity type, entity id, IP, user agent,
  * HTTP status code, and a sanitized metadata snapshot.
  */
+const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+
 export const activityLogger = (
   req: Request,
   res: Response,
   next: NextFunction,
 ): void => {
+  if (!MUTATING_METHODS.has(req.method)) {
+    next();
+    return;
+  }
+
   res.on("finish", () => {
     if (!req.user) return;
 
+    const cleanPath = req.originalUrl.split("?")[0];
     // Derive entity name from URL: /api/v1/<entity>/...
-    const segments = req.path.split("/").filter(Boolean);
+    const segments = cleanPath.split("/").filter(Boolean);
     const entity = segments[2] ?? null; // e.g. 'orders', 'docks'
     const entityId = req.params.id ?? null;
 

@@ -151,6 +151,35 @@ export const verify2FALoginSchema = z.object({
   }),
 });
 
+export const disable2FASchema = z.object({
+  body: z.object({
+    currentPassword: z.string({
+      required_error: "Current password is required",
+    }),
+    code: z.string().length(6, "Verification code must be 6 digits"),
+  }),
+});
+
+export const verifyEmailSchema = z.object({
+  body: z.object({
+    token: z.string({ required_error: "Verification token is required" }).min(1),
+  }),
+});
+
+export const resendVerificationSchema = z.object({
+  body: z.object({
+    email: z
+      .string({ required_error: "Email is required" })
+      .email("Invalid email address"),
+  }),
+});
+
+export const logoutSchema = z.object({
+  body: z.object({
+    refreshToken: z.string().min(1).optional(),
+  }),
+});
+
 export type RegisterInput = z.infer<typeof registerSchema>["body"];
 export type LoginInput = z.infer<typeof loginSchema>["body"];
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>["body"];
@@ -163,6 +192,7 @@ export type ChangePasswordInput = z.infer<typeof changePasswordSchema>["body"];
 export type RefreshTokenInput = z.infer<typeof refreshTokenSchema>["body"];
 export type Activate2FAInput = z.infer<typeof activate2FASchema>["body"];
 export type Verify2FALoginInput = z.infer<typeof verify2FALoginSchema>["body"];
+export type Disable2FAInput = z.infer<typeof disable2FASchema>["body"];
 export type Verify2FAInput = { code: string };
 export type EmailActionInput = { email: string };
 

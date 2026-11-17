@@ -47,6 +47,7 @@ const envSchema = z.object({
     .default("development"),
   PORT: z.string().default("3000"),
   APP_URL: z.string().url().default("http://localhost:3000"),
+  TRUST_PROXY: z.preprocess((v) => v === "true", z.boolean()).default(false),
 
   DB_TYPE: z.string().default("postgres"),
   DB_HOST: z.string().default("localhost"),
