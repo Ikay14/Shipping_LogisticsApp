@@ -3,6 +3,7 @@ import { OrderStatus, OrderPriority } from "../../generated/prisma/client";
 
 export const createOrderSchema = z.object({
   body: z.object({
+    userId: z.string().uuid("userId must be a valid UUID").optional(),
     recipientName: z
       .string({ required_error: "recipientName is required" })
       .min(2, "recipientName must be at least 2 characters"),

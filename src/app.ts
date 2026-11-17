@@ -1,9 +1,12 @@
 import "express-async-errors";
 import express, { Application, Request, Response } from "express";
 import cors from "cors";
+import path from "path";
 import helmet from "helmet";
 import morgan from "morgan";
 import hpp from "hpp";
+import swaggerUi from "swagger-ui-express";
+import YAML from "yamljs";
 import { env } from "./config/env";
 import { errorHandler } from "./middlewares/errorHandler";
 import { notFound } from "./middlewares/notFound";
@@ -74,6 +77,9 @@ app.use(`${API_PREFIX}/docks`, dockRoutes);
 app.use(`${API_PREFIX}/transactions`, transactionRoutes);
 app.use(`${API_PREFIX}/activity-logs`, activityLogRoutes);
 app.use(`${API_PREFIX}/uploads`, uploadRoutes);
+
+const swaggerSpec = YAML.load(path.resolve(process.cwd(), "docs/openapi.yaml"));
+app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 app.use(notFound);
 app.use(errorHandler);
