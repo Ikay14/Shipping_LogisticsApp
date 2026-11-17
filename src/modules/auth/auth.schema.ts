@@ -154,7 +154,7 @@ export const verify2FALoginSchema = z.object({
 export const disable2FASchema = z.object({
   body: z.object({
     currentPassword: z.string({
-      required_error: "Current password is required",
+      error: "Current password is required",
     }),
     code: z.string().length(6, "Verification code must be 6 digits"),
   }),
@@ -162,14 +162,14 @@ export const disable2FASchema = z.object({
 
 export const verifyEmailSchema = z.object({
   body: z.object({
-    token: z.string({ required_error: "Verification token is required" }).min(1),
+    token: z.string({ error: "Verification token is required" }).min(1),
   }),
 });
 
 export const resendVerificationSchema = z.object({
   body: z.object({
     email: z
-      .string({ required_error: "Email is required" })
+      .string({ error: "Email is required" })
       .email("Invalid email address"),
   }),
 });
