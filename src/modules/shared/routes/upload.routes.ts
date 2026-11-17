@@ -2,7 +2,7 @@ import { Router } from "express";
 import { UploadController } from "../controller/upload.controller";
 import { authenticate } from "../../../middlewares/authenticate";
 import { uploadLimiter } from "../../../middlewares/rateLimiter";
-import { upload } from "../../../utils/upload";
+import { upload, documentUpload } from "../../../utils/upload";
 
 const router = Router();
 
@@ -12,13 +12,23 @@ router.use(uploadLimiter);
 
 /**
  * POST /api/v1/uploads/single
- * Accepts query parameters: ?webp=true & ?docs=true
+ * Accepts query parameter: ?webp=true (images only)
  */
 router.post("/single", upload.single("file"), UploadController.uploadSingle);
 
 /**
+ * POST /api/v1/uploads/documents/single
+ * Dedicated endpoint for PDF/Word/CSV documents
+ */
+router.post(
+  "/documents/single",
+  documentUpload.single("file"),
+  UploadController.uploadSingle,
+);
+
+/**
  * POST /api/v1/uploads/multiple
- * Accepts query parameters: ?webp=true & ?docs=true
+ * Accepts query parameter: ?webp=true (images only)
  * Caps maximum concurrent file uploads to 10.
  */
 router.post(
