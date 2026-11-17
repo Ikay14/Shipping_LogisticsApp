@@ -16,6 +16,7 @@ import type {
   RefreshTokenInput,
   Activate2FAInput,
   Verify2FALoginInput,
+  Disable2FAInput,
 } from "./auth.schema";
 
 /**
@@ -38,7 +39,11 @@ export const AuthController = {
       req.body as RegisterInput,
       getSecurityContext(req),
     );
-    res.status(StatusCodes.CREATED).json({ success: true, data: result });
+    res.status(StatusCodes.CREATED).json({
+      success: true,
+      message: AUTH_MESSAGES.REGISTRATION_SUCCESS,
+      data: result,
+    });
   },
 
   /**
@@ -170,15 +175,47 @@ export const AuthController = {
   },
 
   /**
+   * POST /auth/2fa/disable
+   */
+  async disable2FA(req: Request, res: Response): Promise<void> {
+    const { currentPassword, code } = req.body as Disable2FAInput;
+    await AuthService.disable2FA(
+      req.user!.userId,
+      currentPassword,
+      code,
+      getSecurityContext(req),
+    );
+    res.status(StatusCodes.OK).json({
+      success: true,
+      message: "Two-factor authentication disabled successfully",
+    });
+  },
+
+  /**
    * POST /auth/logout
    */
   async logout(req: Request, res: Response): Promise<void> {
     const { refreshToken } = req.body;
-    // Attempt to revoke the refresh token if provided
+    // Attempt to revoke the refresh token if provided and owned by caller
     if (refreshToken) {
-      await AuthService.logout(refreshToken, getSecurityContext(req));
+      await AuthService.logout(
+        refreshToken,
+        req.user!.userId,
+        getSecurityContext(req),
+      );
     }
 
+    res.status(StatusCodes.OK).json({
+      success: true,
+      message: AUTH_MESSAGES.LOGOUT_SUCCESS,
+    });
+  },
+
+  /**
+   * POST /auth/logout-all
+   */
+  async logoutAll(req: Request, res: Response): Promise<void> {
+    await AuthService.logoutAll(req.user!.userId, getSecurityContext(req));
     res.status(StatusCodes.OK).json({
       success: true,
       message: AUTH_MESSAGES.LOGOUT_SUCCESS,

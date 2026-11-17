@@ -3,6 +3,7 @@ import { NotFoundError } from "../../errors/NotFoundError";
 import { BadRequestError } from "../../errors/BadRequestError";
 import { AuditService } from "../shared/service/AuditService";
 import { PasswordUtils } from "../../utils/password";
+import { emailService } from "../shared/service/email/index";
 import type { UpdateProfileInput, UserEntity } from "./auth.schema";
 import { StorageService } from "../../utils/upload";
 
@@ -22,11 +23,13 @@ export const ProfileService = {
         isActive: true,
         isEmailVerified: true,
         profileImageUrl: true,
-        isTwoFactorEnabled: true,
-        lastLoginAt: true,
-        currentLoginIp: true,
         createdAt: true,
         updatedAt: true,
+        ...({
+          isTwoFactorEnabled: true,
+          lastLoginAt: true,
+          currentLoginIp: true,
+        } as any),
       },
     });
 
@@ -41,7 +44,16 @@ export const ProfileService = {
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new NotFoundError("User not found");
 
-    const data: any = { ...updateData };
+    const data: {
+      name?: string;
+      phone?: string;
+      passwordHash?: string;
+    } = {};
+
+    if (updateData.name !== undefined) data.name = updateData.name;
+    if (updateData.phone !== undefined) data.phone = updateData.phone;
+
+    let passwordChanged = false;
 
     // Handle password change if requested
     if (updateData.newPassword) {
@@ -57,37 +69,58 @@ export const ProfileService = {
       if (!isMatch) throw new BadRequestError("Incorrect current password");
 
       data.passwordHash = await PasswordUtils.hash(updateData.newPassword);
-      delete data.currentPassword;
-      delete data.newPassword;
+      passwordChanged = true;
     }
 
-    const updatedUser = await prisma.user.update({
-      where: { id: userId },
-      data,
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        phone: true,
-        role: true,
-        isActive: true,
-        isEmailVerified: true,
-        profileImageUrl: true,
+    const userSelect = {
+      id: true,
+      name: true,
+      email: true,
+      phone: true,
+      role: true,
+      isActive: true,
+      isEmailVerified: true,
+      profileImageUrl: true,
+      createdAt: true,
+      updatedAt: true,
+      ...({
         isTwoFactorEnabled: true,
         lastLoginAt: true,
         currentLoginIp: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-    });
+      } as any),
+    };
+
+    const updatedUser = passwordChanged
+      ? await prisma.$transaction(async (tx) => {
+          const updated = await tx.user.update({
+            where: { id: userId },
+            data,
+            select: userSelect,
+          });
+          await tx.userToken.deleteMany({
+            where: { userId, type: "REFRESH_TOKEN" },
+          });
+          return updated;
+        })
+      : await prisma.user.update({
+          where: { id: userId },
+          data,
+          select: userSelect,
+        });
 
     AuditService.log({
       userId,
-      action: "PROFILE_UPDATED",
+      action: passwordChanged ? "PASSWORD_RESET_COMPLETED" : "PROFILE_UPDATED",
       entity: "user",
       entityId: userId,
       metadata: { changes: Object.keys(updateData) },
     });
+
+    if (passwordChanged) {
+      emailService
+        .sendPasswordChangedConfirmation(user.email, user.name)
+        .catch(console.error);
+    }
 
     return updatedUser as unknown as UserEntity;
   },

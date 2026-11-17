@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from "express";
-import { verifyToken, TokenPayload } from "../utils/jwt";
+import { verifyAccessToken, TokenPayload } from "../utils/jwt";
 import { UnauthenticatedError } from "../errors/UnauthenticatedError";
+import { prisma } from "../db/prisma";
 
 // Extend Express Request to carry user payload
 declare global {
@@ -11,11 +12,11 @@ declare global {
   }
 }
 
-export const authenticate = (
+export const authenticate = async (
   req: Request,
   _res: Response,
   next: NextFunction,
-): void => {
+): Promise<void> => {
   const authHeader = req.headers.authorization;
 
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -24,11 +25,28 @@ export const authenticate = (
 
   const token = authHeader.split(" ")[1];
 
+  let payload: TokenPayload;
   try {
-    const payload = verifyToken(token);
-    req.user = payload;
-    next();
+    payload = verifyAccessToken(token);
   } catch {
     throw new UnauthenticatedError("Invalid or expired token");
   }
+
+  const user = await prisma.user.findUnique({
+    where: { id: payload.userId },
+    select: { id: true, name: true, role: true, isActive: true },
+  });
+
+  if (!user || !user.isActive) {
+    throw new UnauthenticatedError("Account is inactive or no longer exists");
+  }
+
+  req.user = {
+    ...payload,
+    id: user.id,
+    userId: user.id,
+    name: user.name,
+    role: user.role,
+  };
+  next();
 };
