@@ -1,61 +1,89 @@
-# Implementation Plan: `fix/zod-v4-and-typescript-fixes`
+# Implementation Plan: `fix/security-idor-and-rbac`
 
 ## Goal
-Resolve Zod v4 API mismatches, eliminate unsafe `as any` casts against Prisma types, and fix environment/database pool startup and shutdown edge cases so `npm run build` (`tsc`) passes cleanly with `strict: true`.
+Eliminate Broken Object-Level Authorization (IDOR) and missing Role-Based Access Control (RBAC) vulnerabilities across Activity Logs, Transactions, Orders, and Shipping Docks, and harden proxy IP resolution.
 
 ---
 
-## 1. Fix Zod v4 Validation Middleware & Schemas
+## 1. Activity Logs: Restrict Global Log Access
 
 ### Problem
-`package.json` depends on `"zod": "^4.3.6"`, while parts of the codebase still use Zod v3 APIs:
-- `src/middlewares/validateRequest.ts` imports `AnyZodObject` and reads `error.errors` (in Zod v4, `ZodError` exposes `error.issues`, and `AnyZodObject` was removed/changed).
-- `src/modules/auth/auth.schema.ts` and `src/modules/orders/order.schema.ts` pass `{ required_error: "..." }` (Zod v3), whereas `src/modules/docks/dock.schema.ts` and `src/modules/transactions/transaction.schema.ts` use `{ error: "..." }` (Zod v4).
+In `src/modules/activity-logs/activity-log.routes.ts` (lines 7–10), `GET /api/v1/activity-logs` only requires `authenticate`. Any `CUSTOMER` can read the entire system's audit trail, including other users' `userId`, IP addresses, and `userAgent` strings.
 
 ### Steps
-1. **`src/middlewares/validateRequest.ts`**:
-   - Replace `AnyZodObject` with `z.ZodObject<any>` (or `z.ZodType` with `parseAsync`).
-   - Update `error.errors.map(...)` to `error.issues.map(...)`.
-   - Ensure `result` typing handles `body`, `query`, and `params` safely without `any` errors.
-2. **`src/modules/auth/auth.schema.ts` & `src/modules/orders/order.schema.ts`**:
-   - Standardize error options to Zod v4 syntax (`{ error: "..." }` instead of `{ required_error: "..." }`).
-   - Verify `z.nativeEnum(...)` vs `z.enum(...)` compatibility in Zod v4 across `order.schema.ts`, `dock.schema.ts`, and `transaction.schema.ts`.
+1. **`src/modules/activity-logs/activity-log.routes.ts`**:
+   - Add `authorize([UserRole.ADMIN, UserRole.MANAGER])` to `GET /`.
+   - Keep `GET /me` accessible to any authenticated user (already scoped to `req.user!.userId`).
+   - Add Zod query validation (`page`, `limit`, optional `userId` UUID) via `validateRequest`.
 
 ---
 
-## 2. Remove Stale `as any` Casts
+## 2. Transactions: Enforce Ownership & Role Scoping
 
 ### Problem
-Multiple services wrap Prisma queries and fields in `as any` casts left over from an older generated Prisma client, hiding real type errors.
+In `src/modules/transactions/transaction.routes.ts` (lines 21–26), `GET /api/v1/transactions` and `GET /api/v1/transactions/:id` have no role restrictions and no `userId` filter—any `CUSTOMER` can view all financial transactions of all users.
 
 ### Steps
-1. Run `npm run db:generate` (`prisma generate`) to ensure `src/generated/prisma` is current.
-2. Audit and remove `as any` workarounds in:
-   - `src/modules/auth/auth.service.ts` (`prisma.user as any`, `(user as any).isTwoFactorEnabled`, `(user as any).twoFactorSecret`, `data as any`)
-   - `src/modules/auth/profile.service.ts` (`...({ isTwoFactorEnabled: true, ... } as any)`)
-   - `src/modules/orders/order.service.ts` (`where as any`, `originDock`/`destinationDock` `as any`, `tx as any`, `history` `as any`, `data as any`)
-   - `src/modules/docks/dock.service.ts` (`_count as any`, `data: input as any`)
-   - `src/modules/shared/service/AuditService.ts` (`prisma as any`)
-   - `src/middlewares/activityLogger.ts` (`prisma as any`, `metadata as any`)
-3. Also check `src/utils/jwt.ts` (`expiresIn` cast) and `src/utils/device.ts` (`@ts-ignore` on `new UAParser(userAgent)`).
+1. **`src/modules/transactions/transaction.controller.ts` & `transaction.service.ts`**:
+   - Pass `req.user!` (`userId` and `role`) from `TransactionController.getAll` and `getById` to `TransactionService`.
+   - In `TransactionService.getAll`: if `actor.role === UserRole.CUSTOMER`, force `where.userId = actor.userId` (ignoring any arbitrary `query.userId`). Allow `ADMIN`, `MANAGER`, and optionally `STAFF` (confirm policy) to query across users.
+   - In `TransactionService.getById`: if `actor.role === UserRole.CUSTOMER` and `transaction.userId !== actor.userId`, throw `ForbiddenError` (or `NotFoundError` to prevent resource enumeration).
+2. **`src/modules/transactions/transaction.schema.ts` & `transaction.routes.ts`**:
+   - Add `getTransactionsSchema` for pagination/filtering (`orderId`, `status`, `type`) and attach `validateRequest(getTransactionsSchema)` to `GET /`.
 
 ---
 
-## 3. Environment & Database Pool Hardening
+## 3. Orders: Enforce Ownership Scoping & Validation
+
+### Problem
+In `src/modules/orders/order.routes.ts` (lines 22–26) and `src/modules/orders/order.service.ts`:
+- `GET /api/v1/orders` lets any `CUSTOMER` list all orders and filter by any `userId`.
+- `GET /api/v1/orders/:id` and `GET /api/v1/orders/track/:trackingNumber` return full order details, transactions, and owner PII (`user.email`, `user.phone`, `user.name`) to any authenticated user.
+- `GET /:id` and `DELETE /:id` lack UUID param validation.
 
 ### Steps
-1. **`src/config/env.ts`**:
-   - Line 72: `SMTP_PORT: z.string().transform(Number).optional()` turns an empty string `SMTP_PORT=""` into `0`. Preprocess empty strings to `undefined` and validate a valid port integer (`1`–`65535`).
-   - Validate `PORT` as a positive port integer as well.
-   - Replace `( _env.data as any )[secret]` with typed indexing.
-2. **`src/db/prisma.ts` & `src/server.ts`**:
-   - Pass `ssl` configuration to `new Pool({ connectionString: env.DATABASE_URL, ssl: env.DB_SSL ? { rejectUnauthorized: false } : undefined })` (or configurable CA) so `DB_SSL=true` actually takes effect.
-   - Export `pool` from `src/db/prisma.ts` and call `await pool.end()` alongside `await prisma.$disconnect()` inside `shutdown()` in `src/server.ts`.
+1. **`src/modules/orders/order.controller.ts` & `order.service.ts`**:
+   - Pass `req.user!` to `OrderService.getAll`, `getById`, and `getByTrackingNumber`.
+   - In `getAll`: if `actor.role === UserRole.CUSTOMER`, force `where.userId = actor.userId`.
+   - In `getById`: if `actor.role === UserRole.CUSTOMER` and `order.userId !== actor.userId`, throw `ForbiddenError` (or `NotFoundError`).
+   - In `getByTrackingNumber`:
+     - Decide whether tracking is owner/staff-only or public-summary:
+     - If restricted to owner/staff: enforce `order.userId === actor.userId` for `CUSTOMER` roles.
+     - If customers can track by tracking number without owning it, strip sensitive PII (`user.email`, `user.phone`, `recipientPhone`, `amount`/`taxAmount`) and return only shipment tracking status, `history`, and dock names.
+2. **`src/modules/orders/order.schema.ts` & `order.routes.ts`**:
+   - Add `orderIdParamSchema` (`params: { id: z.string().uuid() }`) and attach it to `GET /:id` and `DELETE /:id`.
+
+---
+
+## 4. Shipping Docks: Prevent Transaction Leak on `GET /docks/:id`
+
+### Problem
+`DockService.getById` (`src/modules/docks/dock.service.ts`, lines 33–52) returns the last 20 `transactions` (with user names, amounts, and order tracking numbers) to any authenticated user, including `CUSTOMER`s.
+
+### Steps
+1. **`src/modules/docks/dock.controller.ts` & `dock.service.ts`**:
+   - Pass `req.user?.role` into `DockService.getById(id, role)`.
+   - Only include `transactions` when `role` is `ADMIN`, `MANAGER`, or `STAFF`; omit `transactions` (and sensitive stats) for `CUSTOMER`.
+   - Add query validation schema for `GET /api/v1/docks` pagination/status filtering.
+
+---
+
+## 5. Proxy Trust & IP Extraction
+
+### Problem
+`src/app.ts` does not configure `trust proxy`, yet `src/modules/auth/auth.controller.ts` (`getSecurityContext`) and `src/middlewares/activityLogger.ts` read `req.headers["x-forwarded-for"]` directly, allowing clients to spoof their logged IP address.
+
+### Steps
+1. **`src/app.ts` & `src/config/env.ts`**:
+   - Add optional `TRUST_PROXY` env config (e.g., `"1"` or boolean/hop count in production) and call `app.set("trust proxy", env.TRUST_PROXY)` when enabled.
+2. **`src/modules/auth/auth.controller.ts` & `src/middlewares/activityLogger.ts`**:
+   - Replace manual `req.headers["x-forwarded-for"]` parsing with `req.ip` (which Express computes safely according to `trust proxy`).
 
 ---
 
 ## Verification Checklist
-- [ ] Run `npm install` and `npm run db:generate`.
-- [ ] Run `npm run build` (`tsc`) and confirm zero errors or warnings (`noUnusedLocals`, `noUnusedParameters`, `strict: true`).
-- [ ] Boot server with `.env` having empty `SMTP_PORT=` and verify `env.SMTP_PORT` is `undefined` rather than `0`.
-- [ ] Trigger `SIGINT`/`SIGTERM` and verify both Prisma and `pg` Pool close cleanly.
+- [ ] `CUSTOMER` calling `GET /api/v1/activity-logs` receives `403 Forbidden`; `ADMIN`/`MANAGER` receives `200 OK`.
+- [ ] `CUSTOMER` calling `GET /api/v1/transactions` only sees their own transactions; `GET /transactions/:id` for another user's transaction returns `403`/`404`.
+- [ ] `CUSTOMER` calling `GET /api/v1/orders` only sees their own orders; `GET /orders/:id` and `/orders/track/:trackingNumber` for another user's order do not leak PII or financial data.
+- [ ] `CUSTOMER` calling `GET /api/v1/docks/:id` does not receive other users' `transactions`.
+- [ ] `GET /api/v1/orders/not-a-uuid` returns `400 Bad Request` via Zod validation instead of hitting Prisma.

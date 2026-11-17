@@ -34,13 +34,8 @@ export const activityLogger = (
     const entity = segments[2] ?? null; // e.g. 'orders', 'docks'
     const entityId = req.params.id ?? null;
 
-    // Get real IP (handles proxies / load balancers)
-    const ip =
-      (req.headers["x-forwarded-for"] as string | undefined)
-        ?.split(",")[0]
-        ?.trim() ??
-      req.socket.remoteAddress ??
-      null;
+    // Get client IP safely using Express req.ip (respects trust proxy)
+    const ip = req.ip ?? req.socket.remoteAddress ?? null;
 
     // Safe metadata: only log keys, never values (privacy-safe)
     const bodyKeys =

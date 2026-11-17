@@ -1,8 +1,9 @@
 import { prisma } from "../../db/prisma";
 import { NotFoundError } from "../../errors/NotFoundError";
 import { BadRequestError } from "../../errors/BadRequestError";
+import { ForbiddenError } from "../../errors/ForbiddenError";
 import { AuditService } from "../shared/service/AuditService";
-import { OrderStatus, Prisma } from "../../generated/prisma/client";
+import { OrderStatus, Prisma, UserRole } from "../../generated/prisma/client";
 import { ORDER_MESSAGES } from "../../constants/messages";
 import {
   getPaginationOptions,
@@ -38,17 +39,25 @@ const generateTrackingNumber = (): string => {
   return `${prefix}-${base.slice(0, 4)}-${base.slice(4, 8)}-${base.slice(8)}${checksum}`;
 };
 
+export interface OrderActor {
+  userId: string;
+  role: UserRole;
+}
+
 export const OrderService = {
-  async getAll(query: GetOrdersQuery) {
+  async getAll(query: GetOrdersQuery, actor?: OrderActor) {
     const { page, limit, skip, take } = getPaginationOptions(
       { page: query.page, limit: query.limit },
       10,
     );
 
+    const effectiveUserId =
+      actor?.role === UserRole.CUSTOMER ? actor.userId : query.userId;
+
     const where: Prisma.OrderWhereInput = {
       ...(query.status && { status: query.status }),
       ...(query.priority && { priority: query.priority }),
-      ...(query.userId && { userId: query.userId }),
+      ...(effectiveUserId && { userId: effectiveUserId }),
       ...(query.search && {
         OR: [
           {
@@ -86,7 +95,7 @@ export const OrderService = {
     return formatPaginatedResult(orders, total, page, limit);
   },
 
-  async getById(id: string) {
+  async getById(id: string, actor?: OrderActor) {
     const order = await prisma.order.findUnique({
       where: { id },
       include: {
@@ -108,10 +117,13 @@ export const OrderService = {
     });
 
     if (!order) throw new NotFoundError(`Order with id ${id} not found`);
+    if (actor?.role === UserRole.CUSTOMER && order.userId !== actor.userId) {
+      throw new ForbiddenError("You do not have permission to view this order");
+    }
     return order;
   },
 
-  async getByTrackingNumber(trackingNumber: string) {
+  async getByTrackingNumber(trackingNumber: string, actor?: OrderActor) {
     const order = await prisma.order.findUnique({
       where: { trackingNumber },
       include: {
@@ -126,6 +138,9 @@ export const OrderService = {
     });
 
     if (!order) throw new NotFoundError(ORDER_MESSAGES.ORDER_NOT_FOUND);
+    if (actor?.role === UserRole.CUSTOMER && order.userId !== actor.userId) {
+      throw new ForbiddenError("You do not have permission to view this order");
+    }
     return order;
   },
 

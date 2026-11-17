@@ -1,4 +1,5 @@
 import { prisma } from "../../db/prisma";
+import { UserRole } from "../../generated/prisma/client";
 import { NotFoundError } from "../../errors/NotFoundError";
 import { BadRequestError } from "../../errors/BadRequestError";
 import { AuditService } from "../shared/service/AuditService";
@@ -30,20 +31,27 @@ export const DockService = {
     return formatPaginatedResult(data, total, page, limit);
   },
 
-  async getById(id: string) {
+  async getById(id: string, role?: UserRole) {
+    const canViewTransactions =
+      role === UserRole.ADMIN ||
+      role === UserRole.MANAGER ||
+      role === UserRole.STAFF;
+
     const dock = await prisma.shippingDock.findUnique({
       where: { id },
       include: {
         manager: { select: { id: true, name: true, email: true } },
-        transactions: {
-          take: 20,
-          orderBy: { createdAt: "desc" },
-          include: {
-            user: { select: { id: true, name: true } },
-            order: { select: { id: true, trackingNumber: true, status: true } },
+        ...(canViewTransactions && {
+          transactions: {
+            take: 20,
+            orderBy: { createdAt: "desc" as const },
+            include: {
+              user: { select: { id: true, name: true } },
+              order: { select: { id: true, trackingNumber: true, status: true } },
+            },
           },
-        },
-        _count: { select: { transactions: true } },
+          _count: { select: { transactions: true } },
+        }),
       },
     });
 
