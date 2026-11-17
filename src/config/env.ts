@@ -70,7 +70,10 @@ const envSchema = z.object({
     .default("no-reply@shippinglogistics.com"),
 
   SMTP_HOST: z.string().optional(),
-  SMTP_PORT: z.string().transform(Number).optional(),
+  SMTP_PORT: z.preprocess(
+    (v) => (v === "" || v === undefined ? undefined : Number(v)),
+    z.number().int().min(1).max(65535).optional(),
+  ),
   SMTP_USER: z.string().optional(),
   SMTP_PASS: z.string().optional(),
   SMTP_SECURE: z.preprocess((v) => v === "true", z.boolean()).default(false),
@@ -94,14 +97,15 @@ if (!_env.success) {
 
 // Ensure critical secrets are present in production
 if (_env.data.NODE_ENV === "production") {
+  const envData = _env.data;
   const secrets = [
     "JWT_SECRET",
     "DATABASE_URL",
-    _env.data.EMAIL_PROVIDER === "sendgrid" ? "SENDGRID_API_KEY" : "SMTP_PASS",
-  ];
+    envData.EMAIL_PROVIDER === "sendgrid" ? "SENDGRID_API_KEY" : "SMTP_PASS",
+  ] as const;
 
   secrets.forEach((secret) => {
-    if (!(_env.data as any)[secret]) {
+    if (!envData[secret]) {
       console.error(`❌ Critical secret ${secret} is missing in production!`);
       process.exit(1);
     }

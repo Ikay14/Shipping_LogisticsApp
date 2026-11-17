@@ -56,7 +56,7 @@ export const AuditService = {
 
     setImmediate(async () => {
       try {
-        await (prisma as any).activityLog.create({
+        await prisma.activityLog.create({
           data: {
             userId: data.userId ?? null,
             action: data.action,
@@ -68,7 +68,7 @@ export const AuditService = {
               (typeof data.device === "string" ? data.device : null),
             statusCode: data.statusCode ?? null,
             metadata: {
-              ...((metadata as object) || {}),
+              ...((metadata as Record<string, unknown>) || {}),
               device:
                 data.device && typeof data.device === "object"
                   ? {
@@ -77,7 +77,7 @@ export const AuditService = {
                       type: data.device.deviceType || data.device.type,
                     }
                   : undefined,
-            },
+            } as Prisma.InputJsonValue,
           },
         });
       } catch (error) {
@@ -98,7 +98,7 @@ export const AuditService = {
     error?: string;
   }): Promise<void> {
     try {
-      await (prisma as any).loginHistory.create({
+      await prisma.loginHistory.create({
         data: {
           userId: data.userId,
           ipAddress: data.ipAddress ?? null,
@@ -119,7 +119,7 @@ export const AuditService = {
    */
   async isAccountLocked(userId: string): Promise<boolean> {
     const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000);
-    const recentFailures = await (prisma as any).loginHistory.count({
+    const recentFailures = await prisma.loginHistory.count({
       where: {
         userId,
         isSuccessful: false,

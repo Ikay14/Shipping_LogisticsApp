@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from "express";
+import { Prisma } from "../generated/prisma/client";
 import { prisma } from "../db/prisma";
 
 /**
@@ -44,7 +45,7 @@ export const activityLogger = (
 
     setImmediate(async () => {
       try {
-        await (prisma as any).activityLog.create({
+        await prisma.activityLog.create({
           data: {
             userId: req.user!.userId,
             action: `${req.method} ${req.path}`,
@@ -55,7 +56,7 @@ export const activityLogger = (
             statusCode: res.statusCode,
             metadata: (bodyKeys.length > 0
               ? { bodyFields: bodyKeys }
-              : {}) as any,
+              : {}) as Prisma.InputJsonValue,
           },
         });
       } catch {

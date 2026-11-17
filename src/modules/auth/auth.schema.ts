@@ -8,15 +8,15 @@ import { PasswordUtils } from "../../utils/password";
 export const registerSchema = z.object({
   body: z.object({
     name: z
-      .string({ required_error: "Name is required" })
+      .string({ error: "Name is required" })
       .min(3, "Name must be at least 3 characters")
       .max(60, "Name must be at most 60 characters"),
     email: z
-      .string({ required_error: "Email is required" })
+      .string({ error: "Email is required" })
       .email("Invalid email address"),
     phone: z.string().optional(),
     password: z
-      .string({ required_error: "Password is required" })
+      .string({ error: "Password is required" })
       .superRefine((val, ctx) => {
         const errors = PasswordUtils.validate(val);
         errors.forEach((err) =>
@@ -32,9 +32,9 @@ export const registerSchema = z.object({
 export const loginSchema = z.object({
   body: z.object({
     email: z
-      .string({ required_error: "Email is required" })
+      .string({ error: "Email is required" })
       .email("Invalid email address"),
-    password: z.string({ required_error: "Password is required" }),
+    password: z.string({ error: "Password is required" }),
   }),
 });
 
@@ -64,7 +64,7 @@ export const updateProfileSchema = z.object({
  */
 export const forgotPasswordSchema = z.object({
   body: z.object({
-    email: z.string({ required_error: "Email is required" }).email(),
+    email: z.string({ error: "Email is required" }).email(),
   }),
 });
 
@@ -73,9 +73,9 @@ export const forgotPasswordSchema = z.object({
  */
 export const resetPasswordSchema = z.object({
   body: z.object({
-    token: z.string({ required_error: "Token is required" }),
+    token: z.string({ error: "Token is required" }),
     newPassword: z
-      .string({ required_error: "New password is required" })
+      .string({ error: "New password is required" })
       .superRefine((val, ctx) => {
         const errors = PasswordUtils.validate(val);
         errors.forEach((err) =>
@@ -90,7 +90,7 @@ export const resetPasswordSchema = z.object({
  */
 export const resendResetSchema = z.object({
   body: z.object({
-    email: z.string({ required_error: "Email is required" }).email(),
+    email: z.string({ error: "Email is required" }).email(),
   }),
 });
 
@@ -99,7 +99,7 @@ export const resendResetSchema = z.object({
  */
 export const updateProfilePutSchema = z.object({
   body: z.object({
-    name: z.string({ required_error: "Name is required" }).min(2),
+    name: z.string({ error: "Name is required" }).min(2),
     phone: z.string().optional(),
   }),
 });
@@ -110,10 +110,10 @@ export const updateProfilePutSchema = z.object({
 export const changePasswordSchema = z.object({
   body: z.object({
     currentPassword: z.string({
-      required_error: "Current password is required",
+      error: "Current password is required",
     }),
     newPassword: z
-      .string({ required_error: "New password is required" })
+      .string({ error: "New password is required" })
       .superRefine((val, ctx) => {
         const errors = PasswordUtils.validate(val);
         errors.forEach((err) =>
@@ -128,7 +128,7 @@ export const changePasswordSchema = z.object({
  */
 export const refreshTokenSchema = z.object({
   body: z.object({
-    refreshToken: z.string({ required_error: "Refresh token is required" }),
+    refreshToken: z.string({ error: "Refresh token is required" }),
   }),
 });
 
@@ -146,7 +146,7 @@ export const activate2FASchema = z.object({
  */
 export const verify2FALoginSchema = z.object({
   body: z.object({
-    mfaToken: z.string({ required_error: "MFA session token is required" }),
+    mfaToken: z.string({ error: "MFA session token is required" }),
     code: z.string().length(6, "Verification code must be 6 digits"),
   }),
 });
@@ -154,7 +154,7 @@ export const verify2FALoginSchema = z.object({
 export const disable2FASchema = z.object({
   body: z.object({
     currentPassword: z.string({
-      required_error: "Current password is required",
+      error: "Current password is required",
     }),
     code: z.string().length(6, "Verification code must be 6 digits"),
   }),
@@ -162,14 +162,14 @@ export const disable2FASchema = z.object({
 
 export const verifyEmailSchema = z.object({
   body: z.object({
-    token: z.string({ required_error: "Verification token is required" }).min(1),
+    token: z.string({ error: "Verification token is required" }).min(1),
   }),
 });
 
 export const resendVerificationSchema = z.object({
   body: z.object({
     email: z
-      .string({ required_error: "Email is required" })
+      .string({ error: "Email is required" })
       .email("Invalid email address"),
   }),
 });
