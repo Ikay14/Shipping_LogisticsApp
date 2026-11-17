@@ -23,6 +23,7 @@ import { dockRoutes } from "./modules/docks";
 import { transactionRoutes } from "./modules/transactions";
 import { activityLogRoutes } from "./modules/activity-logs";
 import { uploadRoutes } from "./modules/shared/index";
+import { userRoutes } from "./modules/users";
 
 const app: Application = express();
 
@@ -77,6 +78,7 @@ app.use(`${API_PREFIX}/docks`, dockRoutes);
 app.use(`${API_PREFIX}/transactions`, transactionRoutes);
 app.use(`${API_PREFIX}/activity-logs`, activityLogRoutes);
 app.use(`${API_PREFIX}/uploads`, uploadRoutes);
+app.use(`${API_PREFIX}/users`, userRoutes);
 
 const swaggerSpec = YAML.load(path.resolve(process.cwd(), "docs/openapi.yaml"));
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));

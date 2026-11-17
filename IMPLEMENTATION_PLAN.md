@@ -1,88 +1,70 @@
-# Implementation Plan: `feat/order-transaction-state-machines`
+# Implementation Plan: `feat/admin-user-management-and-emails`
 
 ## Goal
-Fix order/transaction data integrity bugs, enforce valid status transition state machines, synchronize payment completion with order status, and enforce shipping dock lifecycle rules.
+Build an Admin User Management module (`/api/v1/users`), consolidate duplicate email services so order/account notifications work end-to-end, and scope `activityLogger` to mutating requests.
 
 ---
 
-## 1. Fix Order Creation & Update Data Integrity
-
-### Problems
-- `OrderService.create` (`src/modules/orders/order.service.ts`, lines 174–196) drops `notes` and `volumetricWeight` even though `createOrderSchema` accepts them.
-- `OrderController.create` (`src/modules/orders/order.controller.ts`, line 29) reads `req.body.userId`, which `createOrderSchema` strips out.
-- `OrderService.update` (`src/modules/orders/order.service.ts`, lines 255–270) allows updating `amount`, `taxAmount`, or `shippingFee` without recalculating `totalAmount`, and skips dock existence/status validation.
-- `generateTrackingNumber` uses `Math.random()` with no `P2002` collision retry.
-
-### Steps
-1. **`src/modules/orders/order.schema.ts` & `order.controller.ts`**:
-   - Add optional `userId: z.string().uuid().optional()` to `createOrderSchema`.
-   - In `OrderController.create`: only honor `input.userId` when `req.user!.role` is `ADMIN`, `MANAGER`, or `STAFF` (and verify target user exists & is active in `OrderService.create`); for `CUSTOMER`, always use `actorId`.
-2. **`src/modules/orders/order.service.ts`**:
-   - Persist `notes` and `volumetricWeight` in `OrderService.create`.
-   - Use `crypto.randomInt(1000, 10000)` in `generateTrackingNumber()` and add a bounded retry loop if Prisma throws `P2002` on `trackingNumber`.
-   - In `OrderService.update`:
-     - Recompute `totalAmount = (input.amount ?? existing.amount) + (input.taxAmount ?? existing.taxAmount) + (input.shippingFee ?? existing.shippingFee)` whenever any monetary field changes (using `Decimal` or cents/integer arithmetic to avoid floating-point drift).
-     - Validate `originDockId` / `destinationDockId` if updated (using a shared helper with `create`).
-
----
-
-## 2. Enforce Order State Machine & Customer Cancellation
+## 1. Admin User Management Module (`/api/v1/users`)
 
 ### Problem
-`OrderService.updateStatus` (`src/modules/orders/order.service.ts`, lines 219–253) allows arbitrary transitions (e.g., `DELIVERED -> PENDING`, `CANCELLED -> SHIPPED`), never sets `actualDelivery` on `DELIVERED`, and gives customers no way to cancel their own `PENDING` order.
+`prisma/schema.prisma` defines `UserRole` (`ADMIN`, `MANAGER`, `STAFF`, `CUSTOMER`) and `isActive`, and `src/modules/shared/service/email/email.ts` has `sendAccountDeactivated`, yet there are no routes or services to list users, manage roles, or activate/deactivate accounts.
 
 ### Steps
-1. **`src/modules/orders/order.service.ts`**:
-   - Define an explicit transition map:
-     - `PENDING` -> `["PAID", "CANCELLED"]`
-     - `PAID` -> `["PROCESSING", "CANCELLED"]`
-     - `PROCESSING` -> `["SHIPPED", "CANCELLED"]`
-     - `SHIPPED` -> `["DELIVERED"]`
-     - `DELIVERED` -> `[]` (terminal)
-     - `CANCELLED` -> `[]` (terminal)
-   - Reject invalid transitions with `BadRequestError(ORDER_MESSAGES.INVALID_STATUS)`.
-   - Automatically set `actualDelivery: new Date()` when transitioning to `DELIVERED`.
-   - Use `"ORDER_STATUS_CHANGED"` in `AuditService.log` (currently logs `"ORDER_UPDATED"`).
-2. **Customer Cancellation Endpoint**:
-   - Add `POST /api/v1/orders/:id/cancel` (authenticated): verify `order.userId === req.user!.userId` (or staff/admin) and `order.status === "PENDING"`, then transition to `CANCELLED` with `OrderHistory` + `AuditService` log.
+1. **Create `src/modules/users/`**:
+   - `user.schema.ts`:
+     - `getUsersSchema` (`page`, `limit`, `role`, `isActive`, `search`)
+     - `updateUserRoleSchema` (`params.id` UUID, `body.role` `UserRole`)
+     - `updateUserStatusSchema` (`params.id` UUID, `body.isActive` boolean)
+     - `userIdParamSchema` (`params.id` UUID)
+   - `user.service.ts`:
+     - `getAll(query)` using `getPaginationOptions` & `formatPaginatedResult`, selecting only safe user fields (never `passwordHash` or `twoFactorSecret`).
+     - `getById(id)` returning safe user fields + summary counts (`_count` of orders/transactions).
+     - `updateRole(id, role, actorId)`: prevent an admin from demoting themselves or removing the last `ADMIN`; write `AuditService.log`.
+     - `updateStatus(id, isActive, actorId)`: prevent self-deactivation; when `isActive === false`, revoke all `REFRESH_TOKEN` rows for that user in `prisma.$transaction`, log via `AuditService.log`, and trigger `emailService.sendAccountDeactivated`.
+   - `user.controller.ts` & `user.routes.ts` + `index.ts`:
+     - Mount behind `authenticate`.
+     - `GET /` & `GET /:id`: `authorize([UserRole.ADMIN, UserRole.MANAGER])`.
+     - `PATCH /:id/role` & `PATCH /:id/status`: `authorize([UserRole.ADMIN])` (prevent privilege escalation by `MANAGER`).
+2. **`src/app.ts`**:
+   - Mount `app.use(`${API_PREFIX}/users`, userRoutes)`.
 
 ---
 
-## 3. Transaction Integrity & Order Payment Sync
+## 2. Consolidate Email Services & Wire Order/Account Emails
 
-### Problems
-In `src/modules/transactions/transaction.service.ts`:
-- `create` doesn't check `order.userId === input.userId` or validate amounts against `order.totalAmount`.
-- `update` allows arbitrary `TransactionStatus` changes (e.g., `COMPLETED -> PENDING`, `REVERSED -> COMPLETED`) and never updates `Order.status` to `PAID` when a `PAYMENT` completes.
+### Problem
+Two email implementations exist:
+- `src/modules/shared/service/email/index.ts` (uses the pluggable `EmailProvider` factory, used by `AuthService`).
+- `src/modules/shared/service/email/email.ts` (hardcoded Nodemailer singleton, unused anywhere, containing `sendOrderConfirmation` and `sendAccountDeactivated`).
 
 ### Steps
-1. **`src/modules/transactions/transaction.service.ts`**:
-   - In `create`:
-     - Select `userId`, `status`, `totalAmount` from `order`.
-     - Reject if `order.userId !== input.userId` or `order.status === "CANCELLED"`.
-     - For `TransactionType.PAYMENT`, reject if `order.status !== "PENDING"` or if a `COMPLETED` payment already exists; validate `Number(input.amount) === Number(order.totalAmount)` (or track partial payments if intended).
-     - Use `crypto.randomBytes` / `crypto.randomInt` in `generateReference()` and handle `P2002` retries.
-   - In `update`:
-     - Enforce valid `TransactionStatus` transitions (`PENDING -> COMPLETED | FAILED`, `COMPLETED -> REVERSED`, terminal `FAILED` and `REVERSED`).
-     - Wrap in `prisma.$transaction`: when a `PAYMENT` transaction transitions to `COMPLETED`, also update `order.status` from `PENDING` to `PAID` and insert an `OrderHistory` entry.
+1. **`src/modules/shared/service/email/index.ts`**:
+   - Add `sendOrderConfirmation(to, name, trackingNumber, destination)` and `sendOrderStatusUpdate(to, name, trackingNumber, status)` using `this.provider.send(...)`.
+   - Add `sendAccountDeactivated(to, name)` using `this.provider.send(...)`.
+   - Escape user-supplied strings (`name`, `destination`, etc.) before interpolating into HTML email templates to prevent HTML injection in emails.
+2. **Remove `src/modules/shared/service/email/email.ts`** once its methods are migrated.
+3. **Trigger notifications**:
+   - In `OrderService.create`: fetch user email/name and send `sendOrderConfirmation` (non-blocking `.catch(logger.error)`).
+   - In `OrderService.updateStatus`: notify order owner on key transitions (`SHIPPED`, `DELIVERED`, `CANCELLED`).
 
 ---
 
-## 4. Dock Validation & Deletion Safeguards
+## 3. Scope `activityLogger` Middleware to State Changes
+
+### Problem
+`src/middlewares/activityLogger.ts` is mounted globally (`app.use(activityLogger)`) and writes an `ActivityLog` row for every authenticated `GET` request too, despite its comment (`"Audit trail for database mutations"`), which will rapidly bloat `activity_logs`.
 
 ### Steps
-1. **`src/modules/orders/order.service.ts` (shared dock validator)**:
-   - Require both `originDockId` and `destinationDockId` (when provided) to have `DockStatus.ACTIVE` (reject both `INACTIVE` and `MAINTENANCE`).
-   - Reject if `originDockId && destinationDockId && originDockId === destinationDockId`.
-2. **`src/modules/docks/dock.service.ts`**:
-   - In `create` and `update`: validate that `managerId` references an active user with `role` in `[UserRole.ADMIN, UserRole.MANAGER]`.
-   - In `delete`: include `_count: { select: { transactions: true, originOrders: true, destinationOrders: true } }` and reject deletion if any orders or transactions reference the dock.
+1. **`src/middlewares/activityLogger.ts`**:
+   - Skip read-only methods (`if (!["POST", "PUT", "PATCH", "DELETE"].includes(req.method)) return next();`).
+   - Use `req.originalUrl` (stripped of query string) consistently when deriving `entity` and `action` so sub-router paths aren't misparsed.
+   - Replace `console.error` calls in `AuthService` email `.catch(console.error)` with `logger.error`.
 
 ---
 
 ## Verification Checklist
-- [ ] Creating an order persists `notes` and `volumetricWeight`; updating `amount` updates `totalAmount`.
-- [ ] Transitioning an order `DELIVERED -> PENDING` returns `400 Bad Request`; transitioning `SHIPPED -> DELIVERED` sets `actualDelivery`.
-- [ ] Customer can cancel their own `PENDING` order via `POST /orders/:id/cancel`, but cannot cancel `SHIPPED` orders or another user's order.
-- [ ] Completing a `PAYMENT` transaction atomically sets the associated `PENDING` order to `PAID` and creates an `OrderHistory` row.
-- [ ] Assigning an `INACTIVE` dock to an order or deleting a dock linked to orders returns `400 Bad Request`.
+- [ ] `ADMIN` can list users, change roles, and deactivate accounts via `/api/v1/users`; `CUSTOMER` and `MANAGER` cannot promote/demote roles.
+- [ ] Deactivating a user revokes all their refresh tokens and sends the deactivation email via the configured `EMAIL_PROVIDER` (`smtp` or `sendgrid`).
+- [ ] Creating an order triggers an order confirmation email without blocking the HTTP response.
+- [ ] Authenticated `GET` requests no longer insert duplicate rows into `activity_logs`, while `POST`/`PATCH`/`PUT`/`DELETE` mutations are logged cleanly.
