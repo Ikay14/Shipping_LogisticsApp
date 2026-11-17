@@ -4,14 +4,17 @@ import {
   Prisma,
   TransactionStatus,
   TransactionType,
+  UserRole,
 } from "../../generated/prisma/client";
 import { prisma } from "../../db/prisma";
 import { NotFoundError } from "../../errors/NotFoundError";
 import { BadRequestError } from "../../errors/BadRequestError";
+import { ForbiddenError } from "../../errors/ForbiddenError";
 import { AuditService } from "../shared/service/AuditService";
 import type {
   CreateTransactionInput,
   UpdateTransactionInput,
+  GetTransactionsQuery,
 } from "./transaction.schema";
 
 const generateReference = (): string => {
@@ -46,30 +49,56 @@ import {
   PaginationInput,
 } from "../../utils/pagination";
 
+export interface TransactionActor {
+  userId: string;
+  role: UserRole;
+}
+
 export const TransactionService = {
-  async getAll(query: PaginationInput = {}) {
+  async getAll(query: GetTransactionsQuery = {}, actor?: TransactionActor) {
     const { page, limit, skip, take } = getPaginationOptions(query, 50);
+
+    const isCustomer = actor?.role === UserRole.CUSTOMER;
+    const where: Prisma.TransactionWhereInput = {
+      ...(isCustomer
+        ? { userId: actor.userId }
+        : query.userId
+          ? { userId: query.userId }
+          : {}),
+      ...(query.orderId && { orderId: query.orderId }),
+      ...(query.status && { status: query.status }),
+      ...(query.type && { type: query.type }),
+    };
 
     const [data, total] = await prisma.$transaction([
       prisma.transaction.findMany({
+        where,
         orderBy: { createdAt: "desc" },
         skip,
         take,
         include: TRANSACTION_INCLUDE,
       }),
-      prisma.transaction.count(),
+      prisma.transaction.count({ where }),
     ]);
 
     return formatPaginatedResult(data, total, page, limit);
   },
 
-  async getById(id: string) {
+  async getById(id: string, actor?: TransactionActor) {
     const transaction = await prisma.transaction.findUnique({
       where: { id },
       include: TRANSACTION_INCLUDE,
     });
     if (!transaction)
       throw new NotFoundError(`Transaction with id ${id} not found`);
+    if (
+      actor?.role === UserRole.CUSTOMER &&
+      transaction.userId !== actor.userId
+    ) {
+      throw new ForbiddenError(
+        "You do not have permission to view this transaction",
+      );
+    }
     return transaction;
   },
 

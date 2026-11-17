@@ -9,6 +9,7 @@ import {
   updateOrderSchema,
   updateStatusSchema,
   getOrdersSchema,
+  orderIdParamSchema,
 } from "./order.schema";
 
 const router = Router();
@@ -17,13 +18,17 @@ const router = Router();
 router.use(authenticate);
 
 /**
- * Public/Staff: List and track orders
+ * Staff: List/track all orders; Customer: List/track own orders
  */
 router.get("/", validateRequest(getOrdersSchema), OrderController.getAll);
 
 router.get("/track/:trackingNumber", OrderController.getByTrackingNumber);
 
-router.get("/:id", OrderController.getById);
+router.get(
+  "/:id",
+  validateRequest(orderIdParamSchema),
+  OrderController.getById,
+);
 
 /**
  * CUSTOMER / STAFF: Create order & cancel pending order
@@ -52,6 +57,11 @@ router.patch(
   OrderController.update,
 );
 
-router.delete("/:id", authorize([UserRole.ADMIN]), OrderController.delete);
+router.delete(
+  "/:id",
+  authorize([UserRole.ADMIN]),
+  validateRequest(orderIdParamSchema),
+  OrderController.delete,
+);
 
 export default router;

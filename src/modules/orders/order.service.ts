@@ -45,6 +45,7 @@ const generateTrackingNumber = (): string => {
   return `${prefix}-${base.slice(0, 4)}-${base.slice(4, 8)}-${base.slice(8)}${checksum}`;
 };
 
+<<<<<<< HEAD
 const VALID_ORDER_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   [OrderStatus.PENDING]: [OrderStatus.PAID, OrderStatus.CANCELLED],
   [OrderStatus.PAID]: [OrderStatus.PROCESSING, OrderStatus.CANCELLED],
@@ -93,17 +94,25 @@ const validateDocks = async (
   }
 };
 
+export interface OrderActor {
+  userId: string;
+  role: UserRole;
+}
+
 export const OrderService = {
-  async getAll(query: GetOrdersQuery) {
+  async getAll(query: GetOrdersQuery, actor?: OrderActor) {
     const { page, limit, skip, take } = getPaginationOptions(
       { page: query.page, limit: query.limit },
       10,
     );
 
-    const where = {
+    const effectiveUserId =
+      actor?.role === UserRole.CUSTOMER ? actor.userId : query.userId;
+
+    const where: Prisma.OrderWhereInput = {
       ...(query.status && { status: query.status }),
       ...(query.priority && { priority: query.priority }),
-      ...(query.userId && { userId: query.userId }),
+      ...(effectiveUserId && { userId: effectiveUserId }),
       ...(query.search && {
         OR: [
           {
@@ -121,7 +130,7 @@ export const OrderService = {
           { recipientPhone: { contains: query.search } },
         ],
       }),
-    } as any;
+    };
 
     const [orders, total] = await Promise.all([
       prisma.order.findMany({
@@ -131,11 +140,8 @@ export const OrderService = {
         orderBy: { createdAt: "desc" },
         include: {
           user: { select: { id: true, name: true, email: true } },
-          // Using any to bridge stale Prisma types
-          ...({
-            originDock: { select: { name: true } },
-            destinationDock: { select: { name: true } },
-          } as any),
+          originDock: { select: { name: true } },
+          destinationDock: { select: { name: true } },
         },
       }),
       prisma.order.count({ where }),
@@ -144,7 +150,7 @@ export const OrderService = {
     return formatPaginatedResult(orders, total, page, limit);
   },
 
-  async getById(id: string) {
+  async getById(id: string, actor?: OrderActor) {
     const order = await prisma.order.findUnique({
       where: { id },
       include: {
@@ -152,7 +158,7 @@ export const OrderService = {
         history: {
           orderBy: { createdAt: "desc" },
           include: { actor: { select: { name: true, role: true } } },
-        } as any,
+        },
         transactions: {
           take: 20,
           orderBy: { createdAt: "desc" },
@@ -160,19 +166,19 @@ export const OrderService = {
             shippingDock: { select: { id: true, name: true, code: true } },
           },
         },
-        // Bridge for recently added relations
-        ...({
-          originDock: { select: { name: true, code: true } },
-          destinationDock: { select: { name: true, code: true } },
-        } as any),
+        originDock: { select: { name: true, code: true } },
+        destinationDock: { select: { name: true, code: true } },
       },
     });
 
     if (!order) throw new NotFoundError(`Order with id ${id} not found`);
+    if (actor?.role === UserRole.CUSTOMER && order.userId !== actor.userId) {
+      throw new ForbiddenError("You do not have permission to view this order");
+    }
     return order;
   },
 
-  async getByTrackingNumber(trackingNumber: string) {
+  async getByTrackingNumber(trackingNumber: string, actor?: OrderActor) {
     const order = await prisma.order.findUnique({
       where: { trackingNumber },
       include: {
@@ -180,15 +186,16 @@ export const OrderService = {
         history: {
           orderBy: { createdAt: "desc" },
           include: { actor: { select: { name: true, role: true } } },
-        } as any,
-        ...({
-          originDock: { select: { name: true, code: true } },
-          destinationDock: { select: { name: true, code: true } },
-        } as any),
+        },
+        originDock: { select: { name: true, code: true } },
+        destinationDock: { select: { name: true, code: true } },
       },
     });
 
     if (!order) throw new NotFoundError(ORDER_MESSAGES.ORDER_NOT_FOUND);
+    if (actor?.role === UserRole.CUSTOMER && order.userId !== actor.userId) {
+      throw new ForbiddenError("You do not have permission to view this order");
+    }
     return order;
   },
 
@@ -301,10 +308,10 @@ export const OrderService = {
           ...(status === OrderStatus.DELIVERED && {
             actualDelivery: new Date(),
           }),
-        } as any,
+        },
       });
 
-      await (tx as any).orderHistory.create({
+      await tx.orderHistory.create({
         data: {
           orderId: id,
           status,
@@ -391,7 +398,7 @@ export const OrderService = {
         actualDelivery: input.actualDelivery
           ? new Date(input.actualDelivery)
           : undefined,
-      } as any,
+      },
     });
 
     AuditService.log({

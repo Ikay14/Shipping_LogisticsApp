@@ -13,6 +13,10 @@ import {
   refreshTokenSchema,
   activate2FASchema,
   verify2FALoginSchema,
+  disable2FASchema,
+  verifyEmailSchema,
+  resendVerificationSchema,
+  logoutSchema,
 } from "./auth.schema";
 import {
   authLimiter,
@@ -67,17 +71,24 @@ router.post(
   AuthController.resetPassword,
 );
 
-router.post("/verify-email", strictLimiter, AuthController.verifyEmail);
+router.post(
+  "/verify-email",
+  strictLimiter,
+  validateRequest(verifyEmailSchema),
+  AuthController.verifyEmail,
+);
 
 router.post(
   "/resend-verification",
   strictLimiter,
+  validateRequest(resendVerificationSchema),
   AuthController.resendVerification,
 );
 
 router.use(authenticate);
 
-router.post("/logout", AuthController.logout);
+router.post("/logout", validateRequest(logoutSchema), AuthController.logout);
+router.post("/logout-all", AuthController.logoutAll);
 
 router.get("/me", AuthController.getProfile);
 
@@ -88,6 +99,12 @@ router.post(
   strictLimiter,
   validateRequest(activate2FASchema),
   AuthController.activate2FA,
+);
+router.post(
+  "/2fa/disable",
+  strictLimiter,
+  validateRequest(disable2FASchema),
+  AuthController.disable2FA,
 );
 
 // Profile updates

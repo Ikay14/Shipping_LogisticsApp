@@ -7,19 +7,31 @@ import type { CreateOrderInput, GetOrdersQuery } from "./order.schema";
 export class OrderController {
   static async getAll(req: Request, res: Response) {
     const query = req.query as unknown as GetOrdersQuery;
-    const result = await OrderService.getAll(query);
+    const actor = {
+      userId: req.user!.userId,
+      role: req.user!.role as UserRole,
+    };
+    const result = await OrderService.getAll(query, actor);
     return res.status(StatusCodes.OK).json({ success: true, ...result });
   }
 
   static async getById(req: Request, res: Response) {
     const { id } = req.params;
-    const order = await OrderService.getById(id);
+    const actor = {
+      userId: req.user!.userId,
+      role: req.user!.role as UserRole,
+    };
+    const order = await OrderService.getById(id, actor);
     return res.status(StatusCodes.OK).json({ success: true, data: order });
   }
 
   static async getByTrackingNumber(req: Request, res: Response) {
     const { trackingNumber } = req.params;
-    const order = await OrderService.getByTrackingNumber(trackingNumber);
+    const actor = {
+      userId: req.user!.userId,
+      role: req.user!.role as UserRole,
+    };
+    const order = await OrderService.getByTrackingNumber(trackingNumber, actor);
     return res.status(StatusCodes.OK).json({ success: true, data: order });
   }
 
